@@ -350,9 +350,12 @@ function renderRecentSessions() {
         <div class="recent-card">
             <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:0.85rem;">
                 <span>${t.date} | <span style="color:var(--gold)">${t._nodeTitle}</span></span>
-                <span style="color:${(t.pl || 0) >= 0 ? 'var(--accent)' : 'var(--danger)'}">
-                    ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
-                </span>
+                <div style="text-align:right;">
+                    <span style="color:${(t.pl || 0) >= 0 ? 'var(--accent)' : 'var(--danger)'}">
+                        ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
+                    </span>
+                    ${t.lockRiskAmt!=null||t.lockQty!=null?`<div style="font-size:0.62rem;color:#00c8ff;margin-top:2px;">🔒 ${t.lockRiskAmt!=null?(t._curr||'$')+Number(t.lockRiskAmt).toFixed(2):''} ${t.lockQty!=null?'Qty:'+( Number(t.lockQty)<1?Number(t.lockQty).toFixed(3):Number(t.lockQty).toFixed(2)):''}</div>`:''}
+                </div>
             </div>
             <div style="font-size:0.72rem; margin-top:5px; color:var(--gold);">
                 Asset: ${t.asset || '—'} | Outcome: ${t.type || '—'} | Grade: ${t.grade || '—'}
@@ -498,7 +501,12 @@ window.openDayTrades = function (date, trades) {
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
                     <b style="font-size:0.9rem;">${t.asset || '—'} | ${t._nodeTitle}</b>
-                    <br><small style="color:#666;">Grade: ${t.grade || '—'} | ${t.type || '—'} | Lot: ${t.pl || 0 >= 0 ? '' : ''}${t.riskQty || '—'}</small>
+                    <br><small style="color:#666;">Grade: ${t.grade || '—'} | ${t.type || '—'} | Lot: ${t.riskQty || '—'}</small>
+                    ${t.lockRiskAmt != null || t.lockQty != null ? `
+                    <div style="margin-top:5px;display:flex;gap:12px;">
+                        ${t.lockRiskAmt != null ? `<span style="font-size:0.65rem;color:#00c8ff;">🔒 Risk: <b>${t._curr||'$'}${Number(t.lockRiskAmt).toFixed(2)}</b></span>` : ''}
+                        ${t.lockQty != null ? `<span style="font-size:0.65rem;color:#00c8ff;">🔒 Qty: <b>${Number(t.lockQty) < 1 ? Number(t.lockQty).toFixed(3) : Number(t.lockQty).toFixed(2)}</b></span>` : ''}
+                    </div>` : ''}
                 </div>
                 <div style="color:${(t.pl || 0) >= 0 ? '#00ff41' : '#ff3131'}; font-weight:bold; font-size:1rem;">
                     ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
@@ -574,6 +582,14 @@ window.viewDeepDive = function (nodeIdxStr, fbKey) {
                 ${bestPE.direction ? `<p style="font-size:0.7rem;"><b>Planned:</b> ${bestPE.direction} · RR ${bestPE.rrPlanned||'—'}</p>` : ''}
                 ${bestPE.note ? `<p style="font-size:0.68rem;color:#888;font-style:italic;">"${bestPE.note.slice(0,120)}"</p>` : ''}
                 ${bestPE.conflict ? `<p style="color:#ff6600;font-size:0.65rem;">⚠ Conflict noted pre-trade</p>` : ''}
+                ${(bestPE.lockRiskAmt != null || bestPE.lockQty != null) ? `
+                <div style="margin-top:8px;padding:8px 10px;background:#000;border:1px solid #003344;border-radius:5px;">
+                    <div style="font-size:0.52rem;color:#555;letter-spacing:2px;margin-bottom:5px;">🔒 LOCKED FROM PRE-ENTRY</div>
+                    <div style="display:flex;gap:18px;">
+                        ${bestPE.lockRiskAmt != null ? `<div><div style="font-size:0.52rem;color:#555;">LOCK RISK</div><div style="font-size:1rem;font-weight:bold;color:#00c8ff;font-family:monospace;">${t._curr||'$'}${Number(bestPE.lockRiskAmt).toFixed(2)}</div></div>` : ''}
+                        ${bestPE.lockQty != null ? `<div><div style="font-size:0.52rem;color:#555;">LOCK QTY</div><div style="font-size:1rem;font-weight:bold;color:#00c8ff;font-family:monospace;">${Number(bestPE.lockQty)<1?Number(bestPE.lockQty).toFixed(3):Number(bestPE.lockQty).toFixed(2)}</div></div>` : ''}
+                    </div>
+                </div>` : ''}
             </div>` : `
             <div class="info-pane" style="border-color:#1a1a00;">
                 <h3 style="color:#444;margin-top:0;font-size:0.85rem;">4. PRE-ENTRY ANALYSIS</h3>

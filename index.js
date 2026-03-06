@@ -811,11 +811,33 @@ function loadPreEntryBadge() {
         const badge = document.getElementById('preEntryBadge');
         if (!pe || !badge) return;
         const today = new Date().toISOString().slice(0,10);
-        if (pe.date !== today) return; // only show today's
+        if (pe.date !== today) return;
         badge.style.display = 'flex';
         document.getElementById('peBadgeScore').textContent = `Score: ${pe.score}/100`;
         document.getElementById('peBadgeBias').textContent  = pe.biasResult ? pe.biasResult.slice(0,50) : '';
         if (pe.conflict) document.getElementById('peBadgeConflict').textContent = '⚠ CONFLICT';
+
+        // Show LOCK RISK + QTY banner
+        const lockBanner = document.getElementById('lockRiskBanner');
+        if (lockBanner && (pe.lockRiskAmt || pe.lockQty)) {
+            const node = clusters[pe.clusterId]?.nodes[pe.nodeIdx];
+            const curr = node?.curr || '$';
+            document.getElementById('lbRiskAmt').textContent = curr + (pe.lockRiskAmt||0).toFixed(2);
+            document.getElementById('lbQty').textContent     = pe.lockQty != null
+                ? (pe.lockQty < 1 ? Number(pe.lockQty).toFixed(3) : Number(pe.lockQty).toFixed(2))
+                : '—';
+            lockBanner.style.display = 'flex';
+        }
+
+        // Auto-fill riskQty in execution flow
+        if (pe.lockQty != null) {
+            const rqEl = document.getElementById('riskQty');
+            if (rqEl) {
+                const qty = pe.lockQty;
+                rqEl.value = qty < 1 ? qty.toFixed(3) : qty.toFixed(2);
+                updateFlowStatus();
+            }
+        }
     } catch(e) {}
 }
 
@@ -893,7 +915,11 @@ window.handleSaveAction = async function () {
             ],
             scale:   Array.from(document.querySelectorAll('.scale:checked')).map(c => c.value),
             image:   img,
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
+            // Pre-entry lock data
+            lockRiskAmt: (() => { try { const pe = JSON.parse(localStorage.getItem('isi_last_preentry')||'null'); return pe?.lockRiskAmt||null; } catch(e){ return null; } })(),
+            lockQty:     (() => { try { const pe = JSON.parse(localStorage.getItem('isi_last_preentry')||'null'); return pe?.lockQty||null;     } catch(e){ return null; } })(),
+            preScore:    (() => { try { const pe = JSON.parse(localStorage.getItem('isi_last_preentry')||'null'); return pe?.score||null;        } catch(e){ return null; } })(),
         };
 
         try {
