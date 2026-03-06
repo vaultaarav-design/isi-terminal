@@ -268,15 +268,11 @@ function renderTimerSlider() {
             </div>`;
     });
 
-    // Seamless infinite scroll — hamesha duplicate karo (1 card ho ya 10)
-    // Taaki translateX(-50%) loop perfectly work kare bina reset ke
-    const originalHTML = grid.innerHTML;
-    grid.innerHTML = originalHTML + originalHTML; // exact duplicate
+    // Seamless loop — cloneNode se duplicate (innerHTML se nahi — warna timer tick reset karta hai)
+    Array.from(grid.children).forEach(c => grid.appendChild(c.cloneNode(true)));
 
-    // Speed: cards ki count ke hisaab se — kam cards = faster (warna gap dikhta hai)
-    const cardCount = todayCards.length;
-    const speed = Math.max(8, Math.min(25, cardCount * 4)); // 8s min, 25s max, ~4s per card
-    grid.style.animationDuration = speed + 's';
+    // Speed: ~4s per card, 8s min, 25s max
+    grid.style.animationDuration = Math.max(8, Math.min(25, todayCards.length * 4)) + 's';
     grid.classList.remove('no-anim');
 
     highlightSelectedCard();
