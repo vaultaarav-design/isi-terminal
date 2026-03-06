@@ -152,20 +152,10 @@ window.buildNodeUI = function(existingNodes = null) {
                 <input type="number" class="node-balance" placeholder="Setup Balance" value="${ex.balance ?? 100000}" title="Initial Capital">
             </div>
             <div class="days-grid">${dayHtml}</div>
-            <div class="risk-qty-row">
-                <div style="display:flex;gap:10px;align-items:center;">
-                    <label>Default Risk%</label>
-                    <input type="number" class="node-risk" value="${ex.risk ?? 0.35}" step="0.01" style="width:60px;">
-                </div>
-                <div class="qty-range">
-                    <label>Qty</label>
-                    <input type="number" class="qty-from" value="${ex.qtyFrom ?? 1}"  style="width:45px;">
-                    <span>-</span>
-                    <input type="number" class="qty-to"   value="${ex.qtyTo   ?? 10}" style="width:45px;">
-                </div>
+            <div class="risk-qty-row" style="justify-content:flex-end;">
                 <div>
-                    <label>Trade #</label>
-                    <input type="number" class="node-order" value="${ex.order ?? (i + 1)}" style="width:45px;">
+                    <label style="font-size:0.7rem;color:#888;">Trade # (Order)</label>
+                    <input type="number" class="node-order" value="${ex.order ?? (i + 1)}" style="width:55px;">
                 </div>
             </div>
         </div>`;
@@ -226,20 +216,10 @@ window.applyCustomNodes = function() {
                 <input type="number" class="node-balance" placeholder="Setup Balance" value="100000">
             </div>
             <div class="days-grid">${dayHtml}</div>
-            <div class="risk-qty-row">
-                <div style="display:flex;gap:10px;align-items:center;">
-                    <label>Default Risk%</label>
-                    <input type="number" class="node-risk" value="0.35" step="0.01" style="width:60px;">
-                </div>
-                <div class="qty-range">
-                    <label>Qty</label>
-                    <input type="number" class="qty-from" value="1"  style="width:45px;">
-                    <span>-</span>
-                    <input type="number" class="qty-to"   value="10" style="width:45px;">
-                </div>
+            <div class="risk-qty-row" style="justify-content:flex-end;">
                 <div>
-                    <label>Trade #</label>
-                    <input type="number" class="node-order" value="${i+1}" style="width:45px;">
+                    <label style="font-size:0.7rem;color:#888;">Trade # (Order)</label>
+                    <input type="number" class="node-order" value="${i+1}" style="width:55px;">
                 </div>
             </div>
         </div>`;
@@ -252,7 +232,7 @@ window.applyCustomNodes = function() {
 window.addSlot = function(btn, day, nodeIdx) {
     const container = btn.closest('.day-card').querySelector('.slots-container');
     const slotIdx = container.querySelectorAll('.time-slot').length;
-    const defaultRisk = container.closest('.node-setup-card').querySelector('.node-risk')?.value || '0.35';
+    const defaultRisk = '0.35';  // slot mein user manually set karega
     const div = document.createElement('div');
     div.className = 'time-slot';
     div.dataset.day  = day;
@@ -286,7 +266,7 @@ function collectDaySlots(card, day, nodeIdx) {
         const start  = slotEl.querySelector('.slot-start')?.value  || '';
         const end    = slotEl.querySelector('.slot-end')?.value    || '';
         const expire = slotEl.querySelector('.slot-expire')?.value || '';
-        const risk   = parseFloat(slotEl.querySelector('.slot-risk')?.value) || parseFloat(card.querySelector('.node-risk')?.value) || 0.35;
+        const risk   = parseFloat(slotEl.querySelector('.slot-risk')?.value) || 0.35;
         if (start || end || expire) slots.push({ start, end, expire, risk });
     });
     return slots;
@@ -345,11 +325,8 @@ document.getElementById('btnDeploy').onclick = async () => {
                 await update(ref(db, `isi_v6/clusters/${editingClusterId}/nodes/${i}`), {
                     title:   card.querySelector('.node-title').value,
                     curr:    card.querySelector('.node-curr').value,
-                    balance: newSetupBalance,   // this is the SETUP balance (reference only)
+                    balance: newSetupBalance,
                     times:   nodeTimes,
-                    risk:    parseFloat(card.querySelector('.node-risk').value),
-                    qtyFrom: parseInt(card.querySelector('.qty-from').value),
-                    qtyTo:   parseInt(card.querySelector('.qty-to').value),
                     order:   parseInt(card.querySelector('.node-order').value),
                 });
 
@@ -383,9 +360,6 @@ document.getElementById('btnDeploy').onclick = async () => {
                     curr:    card.querySelector('.node-curr').value,
                     balance: b,
                     times:   nodeTimes,
-                    risk:    parseFloat(card.querySelector('.node-risk').value),
-                    qtyFrom: parseInt(card.querySelector('.qty-from').value),
-                    qtyTo:   parseInt(card.querySelector('.qty-to').value),
                     order:   parseInt(card.querySelector('.node-order').value),
                 });
             });

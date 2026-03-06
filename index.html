@@ -357,13 +357,13 @@
     <div class="sib-sep">|</div>
     <div class="sib-item"><span class="sib-label">BALANCE</span><span id="sibBal" class="sib-val">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">RISK%</span><span id="sibRisk" class="sib-val">—</span></div>
+    <div class="sib-item"><span class="sib-label">RISK%</span><span id="sibRisk" class="sib-val" style="color:var(--accent);">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">QTY</span><span id="sibQty" class="sib-val">—</span></div>
+    <div class="sib-item"><span class="sib-label">RISK AMT</span><span id="sibRiskAmt" class="sib-val" style="color:var(--accent);">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">TODAY</span><span id="sibTime" class="sib-val">—</span></div>
+    <div class="sib-item"><span class="sib-label">ACTIVE SLOT</span><span id="sibQty" class="sib-val" style="color:var(--gold);font-size:0.68rem;">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">RISK AMT</span><span id="sibRiskAmt" class="sib-val">—</span></div>
+    <div class="sib-item"><span class="sib-label">ALL SLOTS</span><span id="sibTime" class="sib-val" style="font-size:0.65rem;">—</span></div>
 </div>
 
 <!-- ===== TIMER SLIDER ===== -->
@@ -437,6 +437,14 @@
                     <option value="US30">US30</option>
                 </select>
             </div>
+        </div>
+        <!-- Slot selector — only visible when account has 2+ slots -->
+        <div class="slot-select-wrap" style="display:none; margin-top:10px;">
+            <label style="font-size:0.72rem; color:#888; display:block; margin-bottom:4px;">⏱ Trade Slot</label>
+            <select id="slotSelect" onchange="onSlotChange()"
+                style="width:100%; padding:9px 12px; background:#000; color:var(--gold);
+                       border:1px solid var(--gold); border-radius:5px; font-size:0.8rem; font-weight:bold;">
+            </select>
         </div>
         <div id="accountInfo">Select Cluster + Account from header to calculate risk...</div>
     </div>

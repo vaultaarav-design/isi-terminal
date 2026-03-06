@@ -23,6 +23,7 @@ const db    = getDatabase(fbApp);
 let clusters          = {};
 let selectedClusterId = null;
 let selectedNodeIdx   = null;
+let selectedSlotIdx   = null;  // null = auto (time-based), number = manually selected
 let tradeHistory      = [];
 let equityPoints      = [];
 let chartInstance     = null;
@@ -50,7 +51,7 @@ function getDaySlots(node, dayName) {
     const raw = node?.times?.[dayName];
     if (!raw) return [];
     if (Array.isArray(raw)) return raw.filter(s => s && s.start);
-    if (raw.start) return [{ start: raw.start, end: raw.end||'', expire: raw.expire||'', risk: node.risk ?? 0.35 }];
+    if (raw.start) return [{ start: raw.start, end: raw.end||'', expire: raw.expire||'', risk: raw.risk ?? node.risk ?? 0.35 }];
     return [];
 }
 
@@ -257,7 +258,7 @@ function renderTimerSlider() {
                     <div class="stc-cluster">${cluster.title}</div>
                     <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}${slotLabel}</div>
                     <div class="stc-window">${slot.start||'--'} → ${slot.end||'--'} → ${slot.expire||'--'}</div>
-                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${slotRisk}% · Qty ${node.qtyFrom}–${node.qtyTo}</div>
+                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${slotRisk}%${slotLabel}</div>
                 </div>
                 <div class="stc-right">
                     <div class="stc-status-text tc-status-text">LOADING</div>
@@ -421,31 +422,53 @@ function updateSelectedInfoBar() {
     const dayNameIB = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
     const slotsIB   = getDaySlots(n, dayNameIB);
     const nowMinIB  = new Date().getHours() * 60 + new Date().getMinutes();
-    // Find active slot
-    let activeRiskIB = n.risk || 0.35;
-    let activeSlotNumIB = 0;
-    for (let si = 0; si < slotsIB.length; si++) {
-        const ss = timeToMinutes(slotsIB[si].start);
-        const se = timeToMinutes(slotsIB[si].expire || slotsIB[si].end);
-        if (ss !== null && nowMinIB >= ss && (se === null || nowMinIB < se)) {
-            activeRiskIB = slotsIB[si].risk || activeRiskIB;
-            activeSlotNumIB = si + 1; break;
+
+    // Slot priority: selectedSlotIdx (user ne choose kiya) > time-based active > first slot
+    let chosenSlot = null;
+    let chosenSlotNum = 1;
+
+    if (selectedSlotIdx !== null && slotsIB[selectedSlotIdx]) {
+        // User ne slot dropdown se choose kiya
+        chosenSlot    = slotsIB[selectedSlotIdx];
+        chosenSlotNum = selectedSlotIdx + 1;
+    } else {
+        // Time-based: jo slot abhi active hai
+        for (let si = 0; si < slotsIB.length; si++) {
+            const ss = timeToMinutes(slotsIB[si].start);
+            const se = timeToMinutes(slotsIB[si].expire || slotsIB[si].end);
+            if (ss !== null && nowMinIB >= ss && (se === null || nowMinIB < se)) {
+                chosenSlot    = slotsIB[si];
+                chosenSlotNum = si + 1;
+                break;
+            }
+        }
+        // Fallback: first slot
+        if (!chosenSlot && slotsIB.length) {
+            chosenSlot    = slotsIB[0];
+            chosenSlotNum = 1;
         }
     }
-    const rAmt = (liveBal * activeRiskIB / 100).toFixed(2);
+
+    const activeRisk = chosenSlot?.risk || 0.35;
+    const rAmt       = (liveBal * activeRisk / 100).toFixed(2);
+
+    // Slot label for RISK% field
+    const slotLabel = slotsIB.length > 1
+        ? ` · S${chosenSlotNum}/${slotsIB.length}`
+        : '';
+
+    // TODAY field: show all slots, highlight chosen
     const timeWindow = slotsIB.length
-        ? slotsIB.map((sl,i) => {
-            const ss = timeToMinutes(sl.start);
-            const se = timeToMinutes(sl.expire||sl.end);
-            const isAct = ss !== null && nowMinIB >= ss && (se === null || nowMinIB < se);
-            return `${isAct?'▶ ':''}Slot${i+1}: ${sl.start||'--'}→${sl.expire||sl.end||'--'} (${sl.risk||n.risk}%)`;
-          }).join(' | ')
+        ? slotsIB.map((sl, i) => {
+            const isCh = (i + 1) === chosenSlotNum;
+            return `${isCh ? '▶' : ''}${sl.start||'--'}→${sl.expire||sl.end||'--'}`;
+          }).join('  ')
         : 'Not set';
 
     document.getElementById('sibName').textContent    = n.title || ('Account ' + (selectedNodeIdx + 1));
     document.getElementById('sibBal').textContent     = `${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    document.getElementById('sibRisk').textContent    = `${activeRiskIB}% (slot ${activeSlotNumIB||'—'})`;
-    document.getElementById('sibQty').textContent     = `${n.qtyFrom} – ${n.qtyTo}`;
+    document.getElementById('sibRisk').textContent    = `${activeRisk}%${slotLabel}`;
+    document.getElementById('sibQty').textContent     = chosenSlot ? `${chosenSlot.start||'--'}→${chosenSlot.expire||chosenSlot.end||'--'}` : '—';
     document.getElementById('sibTime').textContent    = timeWindow;
     document.getElementById('sibRiskAmt').textContent = `${n.curr}${rAmt}`;
     bar.classList.add('vis');
@@ -457,8 +480,14 @@ function highlightSelectedCard() {
     removeCardHighlight();
     if (!selectedClusterId || selectedNodeIdx === null) return;
     document.querySelectorAll('.s-timer-card').forEach(c => {
-        if (c.dataset.cluster === selectedClusterId && parseInt(c.dataset.node) === selectedNodeIdx)
+        const clusterMatch = c.dataset.cluster === selectedClusterId;
+        const nodeMatch    = parseInt(c.dataset.node) === selectedNodeIdx;
+        if (!clusterMatch || !nodeMatch) return;
+        // Agar slot manually select hua hai to sirf wahi slot ka card blue
+        // Agar null hai (account sirf select, slot nahi) to sab slots blue
+        if (selectedSlotIdx === null || parseInt(c.dataset.slot) === selectedSlotIdx) {
             c.classList.add('node-selected');
+        }
     });
 }
 function removeCardHighlight() {
@@ -474,41 +503,99 @@ window.updateRiskCalc = function () {
         document.getElementById('accountInfo').textContent = 'Select Cluster + Account from header to calculate risk...';
         return;
     }
-    const asset   = document.getElementById('assetSelect').value;
-    const s       = getNodeStats(selectedClusterId, selectedNodeIdx);
-    const liveBal = s.currentBal ?? n.balance ?? 0;
-    // Use active slot risk% if available, else fallback to node default
+    const asset    = document.getElementById('assetSelect').value;
+    const s        = getNodeStats(selectedClusterId, selectedNodeIdx);
+    const liveBal  = s.currentBal ?? n.balance ?? 0;
     const dayName2 = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
     const slots2   = getDaySlots(n, dayName2);
     const nowMin2  = new Date().getHours() * 60 + new Date().getMinutes();
-    let activeRisk2 = n.risk || 0.35;
-    for (const sl of slots2) {
-        const ss = timeToMinutes(sl.start);
-        const se = timeToMinutes(sl.expire || sl.end);
-        if (ss !== null && nowMin2 >= ss && (se === null || nowMin2 < se)) {
-            activeRisk2 = sl.risk || activeRisk2; break;
+
+    // Populate slot dropdown
+    const slotSel = document.getElementById('slotSelect');
+    if (slotSel) {
+        const prevVal = slotSel.value;
+        slotSel.innerHTML = '';
+        if (slots2.length <= 1) {
+            slotSel.closest('.slot-select-wrap')?.style && (slotSel.closest('.slot-select-wrap').style.display = 'none');
+        } else {
+            slotSel.closest('.slot-select-wrap')?.style && (slotSel.closest('.slot-select-wrap').style.display = '');
+            slots2.forEach((sl, si) => {
+                const opt = document.createElement('option');
+                opt.value = si;
+                opt.textContent = `Slot ${si+1}: ${sl.start||'--'}→${sl.expire||sl.end||'--'} (${sl.risk||0.35}%)`;
+                slotSel.appendChild(opt);
+            });
+            // Restore previous or auto-select active slot
+            if (prevVal !== '' && slots2[parseInt(prevVal)]) {
+                slotSel.value = prevVal;
+            } else {
+                // Auto-select currently active slot
+                let autoIdx = 0;
+                for (let si = 0; si < slots2.length; si++) {
+                    const ss = timeToMinutes(slots2[si].start);
+                    const se = timeToMinutes(slots2[si].expire || slots2[si].end);
+                    if (ss !== null && nowMin2 >= ss && (se === null || nowMin2 < se)) { autoIdx = si; break; }
+                }
+                slotSel.value = autoIdx;
+            }
         }
     }
-    const rAmt = liveBal * activeRisk2 / 100;
-    let hint      = '';
 
+    // Get risk from selected slot
+    const selSlotIdx  = slotSel && slots2.length > 1 ? parseInt(slotSel.value) || 0 : null;
+    let   activeSlot  = null;
+    if (selSlotIdx !== null && slots2[selSlotIdx]) {
+        activeSlot = slots2[selSlotIdx];
+    } else {
+        // Auto: pick time-based active slot
+        for (const sl of slots2) {
+            const ss = timeToMinutes(sl.start);
+            const se = timeToMinutes(sl.expire || sl.end);
+            if (ss !== null && nowMin2 >= ss && (se === null || nowMin2 < se)) { activeSlot = sl; break; }
+        }
+        if (!activeSlot) activeSlot = slots2[0] || null;
+    }
+    const activeRisk2 = activeSlot?.risk || 0.35;
+    const rAmt        = liveBal * activeRisk2 / 100;
+
+    // Update selectedSlotIdx + highlight
+    if (selSlotIdx !== null) {
+        selectedSlotIdx = selSlotIdx;
+    } else {
+        selectedSlotIdx = slots2.length === 1 ? 0 : null;
+    }
+    highlightSelectedCard();
+
+    let hint = '';
     if (asset === 'XAUUSD') {
         const mn = ((rAmt / 7) * 0.01).toFixed(2);
         const mx = ((rAmt / 2.5) * 0.01).toFixed(2);
-        hint     = `Suggested: <b>${mn} – ${mx} Lots</b> (Gold $2.5–$7 SL range)`;
+        hint = `Suggested: <b>${mn} – ${mx} Lots</b> (Gold $2.5–$7 SL range)`;
         document.getElementById('riskQty').value = `${mn} - ${mx}`;
     } else {
         hint = `Risk Amount: <b>${n.curr}${rAmt.toFixed(2)}</b> | Adjust qty manually for ${asset}`;
     }
 
+    const slotInfo = slots2.length > 1
+        ? ` &nbsp;<span style="color:#555;font-size:0.65rem;">· Slot ${(selSlotIdx??0)+1}/${slots2.length} · ${activeRisk2}%</span>`
+        : `<span style="color:#555;font-size:0.65rem;"> · ${activeRisk2}%</span>`;
+
     document.getElementById('accountInfo').innerHTML = `
-        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-            <span>ACC: <b>${n.title||'Account '+(selectedNodeIdx+1)}</b></span>
-            <span>RISK AMT: <b style="color:var(--accent)">${n.curr}${rAmt.toFixed(2)}</b> <span style="color:#555;font-size:0.65rem;">(${activeRisk2}% active)</span></span>
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;align-items:center;">
+            <span>ACC: <b>${n.title||'Account '+(selectedNodeIdx+1)}</b>${slotInfo}</span>
+            <span>RISK AMT: <b style="color:var(--accent)">${n.curr}${rAmt.toFixed(2)}</b></span>
             <span>LIVE BAL: <b style="color:var(--gold)">${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></span>
         </div>
         <div style="margin-top:4px;font-size:0.75rem;color:#aaa;">${hint}</div>`;
     updateFlowStatus();
+};
+
+// Called when user manually changes slot dropdown
+window.onSlotChange = function() {
+    selectedSlotIdx = null; // reset so updateRiskCalc re-reads dropdown
+    updateRiskCalc();        // risk calc + selectedSlotIdx set karega
+    updateSelectedInfoBar(); // info bar bhi sync karo
+    highlightSelectedCard(); // timer card bhi sync karo
 };
 
 // ──────────────────────────────────────────────
