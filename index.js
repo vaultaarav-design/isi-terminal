@@ -41,6 +41,19 @@ const flowKeys = [
 const getActiveNode    = () => clusters[selectedClusterId]?.nodes[selectedNodeIdx] || null;
 const nodeBasePath     = () => `isi_v6/clusters/${selectedClusterId}/nodes/${selectedNodeIdx}`;
 const statsPath        = (cId, nIdx) => `isi_v6/stats/${cId}/${nIdx}`;
+
+// ─────────────────────────────────────────────────────────
+// HELPER — normalize day times (supports old {start,end,expire} + new array format)
+// Returns array of slot objects: [{start,end,expire,risk}]
+// ─────────────────────────────────────────────────────────
+function getDaySlots(node, dayName) {
+    const raw = node?.times?.[dayName];
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter(s => s && s.start);
+    if (raw.start) return [{ start: raw.start, end: raw.end||'', expire: raw.expire||'', risk: node.risk ?? 0.35 }];
+    return [];
+}
+
 const activeStatsPath  = () => statsPath(selectedClusterId, selectedNodeIdx);
 const getClusterPass   = () => clusters[selectedClusterId]?.resetKey || null;
 
@@ -103,13 +116,29 @@ function updateClock() {
     document.querySelectorAll('.s-timer-card').forEach(card => {
         const n = clusters[card.dataset.cluster]?.nodes[card.dataset.node];
         if (!n) return;
-        const tt    = n.times?.[dayName] || {};
         const isSel = card.classList.contains('node-selected');
+
+        // Multi-slot support: pick active/next slot
+        const slots = getDaySlots(n, dayName);
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        // find the best slot: active first, then next upcoming, then first
+        let tt = slots[0] || {};
+        for (const s of slots) {
+            const sStart = timeToMinutes(s.start);
+            const sEnd   = timeToMinutes(s.end);
+            const sExp   = timeToMinutes(s.expire);
+            if (sStart !== null && nowMin >= sStart && (sExp === null || nowMin < sExp)) { tt = s; break; }
+        }
+        // fallback: pick next upcoming
+        if (!tt.start) {
+            for (const s of slots) {
+                if (timeToMinutes(s.start) !== null && nowMin < timeToMinutes(s.start)) { tt = s; break; }
+            }
+        }
 
         const startMin  = timeToMinutes(tt.start);
         const endMin    = timeToMinutes(tt.end);
         const expireMin = timeToMinutes(tt.expire);
-        const nowMin    = now.getHours() * 60 + now.getMinutes();
 
         let st = 'NO DATA', sc = '#333', lbl = '--', countdown = '--:--:--';
         let phase = 'idle';
@@ -211,10 +240,11 @@ function renderTimerSlider() {
     let todayCards = [];
     entries.forEach(([cId, cluster]) => {
         cluster.nodes.forEach((node, nIdx) => {
-            const times = node.times?.[dayName] || {};
-            // Only include nodes that have a start time set for today
-            if (times.start) {
-                todayCards.push({ cId, cluster, node, nIdx, times });
+            // Multi-slot: include if ANY slot has a start time today
+            const slots = getDaySlots(node, dayName);
+            if (slots.length > 0) {
+                // times = first slot for display; all slots passed for richer display
+                todayCards.push({ cId, cluster, node, nIdx, times: slots[0], slots });
             }
         });
     });
@@ -225,7 +255,7 @@ function renderTimerSlider() {
         return;
     }
 
-    todayCards.forEach(({ cId, cluster, node, nIdx, times }) => {
+    todayCards.forEach(({ cId, cluster, node, nIdx, times, slots }) => {
         const s       = getNodeStats(cId, nIdx);
         const liveBal = s.currentBal ?? node.balance ?? 0;
         const riskAmt = (liveBal * (node.risk || 0) / 100).toFixed(0);
@@ -234,8 +264,12 @@ function renderTimerSlider() {
                 <div class="stc-left">
                     <div class="stc-cluster">${cluster.title}</div>
                     <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}</div>
-                    <div class="stc-window">${times.start} → ${times.end || '--'} → ${times.expire || '--'}</div>
-                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${node.risk}% · Qty ${node.qtyFrom}–${node.qtyTo}</div>
+                    <div class="stc-window">${
+                        (slots||[times]).map((s,si) =>
+                            `<span style="color:${si===0?'var(--gold)':'#666'};font-size:0.62rem;">[${s.start||'--'}→${s.expire||s.end||'--'} ${s.risk||node.risk}%]</span>`
+                        ).join(' ')
+                    }</div>
+                    <div class="stc-risk">${node.curr}${riskAmt} risk · Qty ${node.qtyFrom}–${node.qtyTo}</div>
                 </div>
                 <div class="stc-right">
                     <div class="stc-status-text tc-status-text">LOADING</div>
@@ -398,8 +432,10 @@ function updateSelectedInfoBar() {
     const liveBal  = s.currentBal ?? n.balance ?? 0;
     const rAmt     = (liveBal * (n.risk || 0) / 100).toFixed(2);
     const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const tt       = n.times?.[dayName] || {};
-    const timeWindow = (tt.start && tt.expire) ? `${tt.start} → ${tt.expire}` : 'Not set';
+    const slots    = getDaySlots(n, dayName);
+    const timeWindow = slots.length
+        ? slots.map((s,i)=>`Slot${i+1}: ${s.start||'--'}→${s.expire||s.end||'--'} (${s.risk||n.risk}%)`).join(' | ')
+        : 'Not set';
 
     document.getElementById('sibName').textContent    = n.title || ('Account ' + (selectedNodeIdx + 1));
     document.getElementById('sibBal').textContent     = `${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -875,10 +911,11 @@ function renderPortal() {
 
     const aumStr = Object.entries(totByCurr).map(([c,v])=>`${c}${v.toFixed(2)}`).join(' + ');
     const netStr = Object.entries(netByCurr).map(([c,v])=>`${v>=0?'+':''}${c}${v.toFixed(2)}`).join(' + ');
+    const _defCurr = clusters[selectedClusterId]?.nodes[0]?.curr || '$';
     foot.innerHTML = `<tr><td>TOTAL</td><td>${tT}</td><td>${tW}</td>
-        <td style="color:${netStr.includes('-')?'#ff5252':'#00ff41'}">${netStr||'$0.00'}</td>
+        <td style="color:${netStr.includes('-')?'#ff5252':'#00ff41'}">${netStr||_defCurr+'0.00'}</td>
         <td>${tT?(tW/tT*100).toFixed(1):0}%</td>
-        <td style="color:var(--gold);font-weight:bold;">${aumStr||'$0.00'}</td></tr>`;
+        <td style="color:var(--gold);font-weight:bold;">${aumStr||_defCurr+'0.00'}</td></tr>`;
 }
 
 // ──────────────────────────────────────────────
@@ -1162,19 +1199,20 @@ function updateChart() {
                             return t ? `${t.date} — ${t.nodeTitle || ''}` : items[0].label;
                         },
                         label: (item) => {
-                            const i   = item.dataIndex;
-                            const bal = item.parsed.y;
-                            if (i === 0) return `Balance: $${bal.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+                            const i    = item.dataIndex;
+                            const bal  = item.parsed.y;
+                            const curr = (selectedNodeIdx >= 0 && clusters[selectedClusterId]?.nodes[selectedNodeIdx]?.curr) || '$';
+                            if (i === 0) return `Balance: ${curr}${bal.toLocaleString('en-US', {minimumFractionDigits:2})}`;
                             const t = histSlice[i - 1];
-                            if (!t) return `Balance: $${bal.toFixed(2)}`;
+                            if (!t) return `Balance: ${curr}${bal.toFixed(2)}`;
                             const scales = (t.scale||[]).filter(s=>s).length;
                             const outcome = t.type === 'Stop Loss'
                                 ? '🔴 STOP LOSS'
                                 : scales >= 2 ? '🟢 FULL WIN' : '🔵 PARTIAL (1 Scale)';
                             return [
                                 `${outcome}`,
-                                `P/L: $${(t.pl||0).toFixed(2)}`,
-                                `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`
+                                `P/L: ${curr}${(t.pl||0).toFixed(2)}`,
+                                `Balance: ${curr}${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`
                             ];
                         }
                     },
@@ -1192,7 +1230,10 @@ function updateChart() {
                     ticks: {
                         color: '#555',
                         font: { size: 9 },
-                        callback: v => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 0 })
+                        callback: v => {
+                            const curr = (selectedNodeIdx >= 0 && clusters[selectedClusterId]?.nodes[selectedNodeIdx]?.curr) || '$';
+                            return curr + v.toLocaleString('en-US', { minimumFractionDigits: 0 });
+                        }
                     }
                 },
                 x: {

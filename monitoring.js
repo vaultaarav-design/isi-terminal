@@ -30,6 +30,26 @@ let preentryData       = {};  // { [clusterId]: { [nodeIdx]: { [fbKey]: record }
 // Stats path — dedicated lightweight path
 const statsPath = (cId, nIdx) => `isi_v6/stats/${cId}/${nIdx}`;
 
+// ── USD/INR LIVE RATE HELPER ──
+let _usdInrRate = null, _rateTs = 0;
+async function getUsdInrRate() {
+    const now = Date.now();
+    if (_usdInrRate && (now - _rateTs) < 10 * 60 * 1000) return _usdInrRate;
+    try {
+        const r = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const j = await r.json();
+        _usdInrRate = j.rates?.INR || 84;
+        _rateTs = now;
+    } catch(e) { _usdInrRate = _usdInrRate || 84; }
+    return _usdInrRate;
+}
+async function mixedToUSD(byCurr) {
+    const rate = await getUsdInrRate();
+    let total = 0;
+    for (const [c, v] of Object.entries(byCurr)) total += (c === '$') ? v : v / rate;
+    return total;
+}
+
 function getNodeStats(cId, nIdx) {
     const cached = liveStats[cId]?.[String(nIdx)];
     if (cached) return cached;
@@ -244,7 +264,16 @@ function renderPerformanceCard(filtered) {
         const c = cluster.nodes[nodeIdx]?.curr || '$';
         plByCurr[c] = (plByCurr[c] || 0) + (t.pl || 0);
     });
-    const plStr = Object.entries(plByCurr).map(([c,v])=>`${v>=0?'+':''}${c}${v.toFixed(2)}`).join(' ') || '+$0.00';
+    const hasMixedPl = Object.keys(plByCurr).length > 1;
+    let plStr = Object.entries(plByCurr).map(([c,v])=>`${v>=0?'+':''}${c}${v.toFixed(2)}`).join(' ') || '+$0.00';
+    if (hasMixedPl) {
+        getUsdInrRate().then(rate => {
+            let usdTotal = 0;
+            Object.entries(plByCurr).forEach(([c,v]) => usdTotal += (c==='$')?v:v/rate);
+            const plEl2 = document.getElementById('periodPl');
+            plEl2.innerHTML = plStr + ` <span style="color:#555;font-size:0.65rem;">(≈${usdTotal>=0?'+':''}$${usdTotal.toFixed(2)} USD)</span>`;
+        });
+    }
     const plEl = document.getElementById('periodPl');
     plEl.innerHTML   = plStr;
     plEl.style.color = totalPl >= 0 ? 'var(--accent)' : 'var(--danger)';
@@ -288,9 +317,17 @@ function renderPerformanceCard(filtered) {
         const bal = s.currentBal ?? n.balance ?? 0;
         byCurr[c] = (byCurr[c]||0) + bal;
     });
-    currBalEl.innerText = Object.entries(byCurr)
-        .map(([c,v]) => `${c}${v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
-        .join(' + ') || '$0.00';
+    const byCurrEntries = Object.entries(byCurr);
+    const hasMixedBal = byCurrEntries.length > 1;
+    const balStr = byCurrEntries.map(([c,v]) => `${c}${v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`).join(' + ') || '$0.00';
+    if (hasMixedBal) {
+        mixedToUSD(byCurr).then(usdTotal => {
+            getUsdInrRate().then(rate => {
+                currBalEl.innerHTML = balStr + ` <span style="color:#555;font-size:0.65rem;display:block;">≈ $${usdTotal.toLocaleString('en-US',{minimumFractionDigits:2})} USD @ ₹${rate.toFixed(1)}</span>`;
+            });
+        });
+    }
+    currBalEl.innerText = balStr;
 }
 
 // ──────────────────────────────────────────────
@@ -314,7 +351,7 @@ function renderRecentSessions() {
             <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:0.85rem;">
                 <span>${t.date} | <span style="color:var(--gold)">${t._nodeTitle}</span></span>
                 <span style="color:${(t.pl || 0) >= 0 ? 'var(--accent)' : 'var(--danger)'}">
-                    ${(t.pl || 0) >= 0 ? '+' : ''}$${(t.pl || 0).toFixed(2)}
+                    ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
                 </span>
             </div>
             <div style="font-size:0.72rem; margin-top:5px; color:var(--gold);">
@@ -413,7 +450,7 @@ function renderCalendar(filtered) {
                 <span class="d-num">${d}</span>
                 ${dayTr.length > 0 ? `
                     <span style="font-weight:bold; font-size:0.72rem; color:${dayPL >= 0 ? '#00ff41' : '#ff3131'}; text-align:center;">
-                        ${dayPL >= 0 ? '+' : ''}$${Math.abs(dayPL).toFixed(0)}
+                        ${dayPL >= 0 ? '+' : ''}${dayTr[0]?._curr||'$'}${Math.abs(dayPL).toFixed(0)}
                     </span>
                     <span class="d-trades">${dayTr.length} trade${dayTr.length > 1 ? 's' : ''}</span>
                 ` : ''}
@@ -451,7 +488,7 @@ window.openDayTrades = function (date, trades) {
     document.getElementById('modalTitle').innerHTML =
         `${date} &nbsp;|&nbsp; ${trades.length} Trade${trades.length > 1 ? 's' : ''} &nbsp;|&nbsp;
          <span style="color:${totalPl >= 0 ? 'var(--accent)' : 'var(--danger)'}">
-            ${totalPl >= 0 ? '+' : ''}$${totalPl.toFixed(2)}
+            ${totalPl >= 0 ? '+' : ''}${trades[0]?._curr||'$'}${Math.abs(totalPl).toFixed(2)}
          </span>`;
 
     document.getElementById('modalBody').innerHTML = trades.map(t => `
@@ -464,7 +501,7 @@ window.openDayTrades = function (date, trades) {
                     <br><small style="color:#666;">Grade: ${t.grade || '—'} | ${t.type || '—'} | Lot: ${t.pl || 0 >= 0 ? '' : ''}${t.riskQty || '—'}</small>
                 </div>
                 <div style="color:${(t.pl || 0) >= 0 ? '#00ff41' : '#ff3131'}; font-weight:bold; font-size:1rem;">
-                    ${(t.pl || 0) >= 0 ? '+' : ''}$${(t.pl || 0).toFixed(2)}
+                    ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
                 </div>
             </div>
         </div>
