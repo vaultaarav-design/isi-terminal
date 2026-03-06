@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISI Institutional Monitoring v6.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body { padding: 20px; padding-bottom: 0; }
+        /* Monitoring container max-width */
+        .mon-container { max-width: 1350px; margin: auto; }
+    </style>
+</head>
+<body>
+<div class="mon-container">
+
+    <!-- HEADER -->
+    <div class="mon-header">
+        <div>
+            <div class="mon-title">INSTITUTIONAL <span style="color:var(--gold)">MONITORING</span></div>
+            <div id="fbMonStatus" style="font-size:0.62rem; color:#555; margin-top:3px;">● CONNECTING TO FIREBASE...</div>
+        </div>
+        <a href="index.html" class="btn-back">← Back to Terminal</a>
+    </div>
+
+    <!-- ── FILTERS ── -->
+    <div class="mon-filters">
+        <div class="filter-group">
+            <label>📁 Cluster</label>
+            <select id="clusterFilter" onchange="onFilterChange()">
+                <option value="">— Loading Clusters... —</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>🔖 Account View</label>
+            <select id="accFilter" onchange="onFilterChange()" disabled>
+                <option value="ALL">All Accounts (Combined)</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>📅 Timeline Range</label>
+            <select id="timeRange" onchange="onFilterChange()">
+                <option value="1week">Last 7 Days</option>
+                <option value="current" selected>Current Month</option>
+                <option value="3months">Last 3 Months</option>
+                <option value="1year">Last 1 Year</option>
+                <option value="3year">Last 3 Years</option>
+                <option value="all">Total History</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- ── PERFORMANCE OVERVIEW ── -->
+    <div class="perf-overview">
+        <div class="win-circle-container">
+            <div id="winRing" class="win-circle">
+                <span style="font-size:0.65rem; color:#666; text-transform:uppercase;">Win Rate</span>
+                <span id="bigWr" style="font-size:1.8rem; font-weight:900; color:var(--gold);">0%</span>
+            </div>
+        </div>
+        <div class="perf-data-grid">
+            <div class="data-item">
+                <div class="data-label">Current Balance</div>
+                <div id="currBal" class="data-val" style="color:var(--gold);">—</div>
+            </div>
+            <div class="data-item">
+                <div class="data-label">Period P/L</div>
+                <div id="periodPl" class="data-val">$0.00</div>
+            </div>
+            <div class="data-item">
+                <div class="data-label">Return %</div>
+                <div id="periodPerc" class="data-val">0.00%</div>
+            </div>
+            <div class="data-item">
+                <div class="data-label">Trade Count</div>
+                <div id="periodTrades" class="data-val" style="color:var(--gold);">0</div>
+            </div>
+            <div class="data-item" style="grid-column:span 4;">
+                <div class="data-label">Account Breakdown</div>
+                <div id="accBreakdown" style="font-size:0.72rem; color:#aaa; margin-top:5px; line-height:1.6;">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── STATS BAR ── -->
+    <div class="stats-bar">
+        <div class="stat-box">
+            <div style="font-size:0.65rem; color:#666; text-transform:uppercase; letter-spacing:1px;">Total P/L</div>
+            <div id="pnl" class="stat-val">$0.00</div>
+        </div>
+        <div class="stat-box">
+            <div style="font-size:0.65rem; color:#666; text-transform:uppercase; letter-spacing:1px;">Executions</div>
+            <div id="trades" class="stat-val">0</div>
+        </div>
+        <div class="stat-box">
+            <div style="font-size:0.65rem; color:#666; text-transform:uppercase; letter-spacing:1px;">Win Rate</div>
+            <div id="wr" class="stat-val">0%</div>
+        </div>
+        <div class="stat-box">
+            <div style="font-size:0.65rem; color:#666; text-transform:uppercase; letter-spacing:1px;">Green Days</div>
+            <div id="gDays" class="stat-val">0</div>
+        </div>
+    </div>
+
+    <!-- ── AI WEEKLY COACH ── -->
+    <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-left:4px solid #c5a059;
+                border-radius:8px;padding:16px;margin-bottom:22px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:0.82rem;font-weight:bold;color:#c5a059;letter-spacing:1px;">🤖 AI Performance Coach</div>
+                <div style="font-size:0.65rem;color:#555;margin-top:3px;">Current filtered trades ka AI analysis — patterns, violations, improvements</div>
+            </div>
+            <button onclick="runAIWeeklyCoach()"
+                style="background:#0a0a00;border:2px solid #c5a059;color:#c5a059;
+                       padding:10px 20px;border-radius:6px;font-weight:bold;
+                       font-size:0.75rem;cursor:pointer;letter-spacing:1px;width:auto;">
+                ▶ RUN AI ANALYSIS
+            </button>
+        </div>
+        <div id="aiCoachBox" style="display:none;margin-top:12px;"></div>
+    </div>
+
+    <!-- ── RECENT SESSIONS ── -->
+    <div class="recent-container">
+        <h2 style="font-size:0.88rem;">Recent 6 Sessions Recap</h2>
+        <div id="recentSessions" class="recent-grid">
+            <div style="color:#555; font-size:0.8rem; padding:20px;">Select a cluster to view sessions...</div>
+        </div>
+    </div>
+
+    <!-- ── CALENDAR ── -->
+    <div id="calendarArea"></div>
+
+</div><!-- /mon-container -->
+
+<!-- ===== FOOTER ===== -->
+<footer class="isi-footer">
+    <div class="footer-brand">INFLLAX</div>
+    <div class="footer-tagline">Institutional Intelligence · Precision Execution · Rule-Based Systems</div>
+    <div class="footer-divider"></div>
+    <div class="footer-meta">
+        <span>Platform</span> &nbsp;·&nbsp; <b>ISI Terminal v6.0</b> &nbsp;·&nbsp; <span>Institutional Grade Trading Infrastructure</span><br>
+        <span>Project Head</span> &nbsp;·&nbsp; <b>Aarav (Ravi)</b> &nbsp;·&nbsp; <span>Founder & System Architect, Infllax</span><br>
+        <span>Developed & Maintained by</span> &nbsp;·&nbsp; <b>Infllax</b> &nbsp;·&nbsp; <span>Upcoming · In Active Development</span>
+    </div>
+    <div class="footer-copy">© 2025 INFLLAX · ALL RIGHTS RESERVED · AARAV (RAVI)</div>
+</footer>
+
+<!-- ── TRADE DETAIL MODAL ── -->
+<div id="tradeModal" class="mon-modal">
+    <div class="mon-modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #222; padding-bottom:14px; margin-bottom:14px;">
+            <h2 id="modalTitle" style="color:var(--gold); margin:0; border:none; padding:0;">Session Deep-Dive</h2>
+            <button onclick="closeModal()" style="background:var(--danger); border:none; color:#fff; padding:8px 16px; cursor:pointer; font-weight:bold; width:auto; border-radius:4px;">CLOSE ✕</button>
+        </div>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<script type="module" src="monitoring.js"></script>
+</body>
+</html>
