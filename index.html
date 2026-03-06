@@ -133,9 +133,9 @@
             width: 100%; overflow: hidden; position: relative;
             padding: 14px 0; background: #080808; border-bottom: 1px solid #1a1a1a;
         }
-        .slider-track { display: flex; gap: 14px; padding: 0 14px; animation: autoSlide 18s linear infinite; }
+        .slider-track { display: flex; gap: 14px; padding: 0 14px; animation: autoSlide 18s linear infinite; width: max-content; }
         .slider-track:hover { animation-play-state: paused; }
-        .slider-track.no-anim { animation: none; flex-wrap: wrap; }
+        .slider-track.no-anim { animation: none; flex-wrap: wrap; width: 100%; }
         @keyframes autoSlide { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 
         .s-timer-card {
