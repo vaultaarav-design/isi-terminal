@@ -470,38 +470,15 @@ window.calcQty = function() {
         return;
     }
 
+    // ── SIMPLE FORMULA: Qty = Risk Amount ÷ |Entry - SL| ──
     const slDist = Math.abs(entry - sl);
-    if (distEl) distEl.textContent = slDist.toFixed(2) + ' pts';
+    if (distEl) distEl.textContent = slDist.toFixed(5);
 
-    // Qty calculation by asset type
-    const asset = (document.getElementById('peAsset')?.value || 'XAUUSD').toUpperCase();
-    let qty = null, qtyLabel = '';
-
-    if (asset === 'XAUUSD') {
-        // Gold: 1 lot = $10/pip (1 pip = 0.1), SL in price points
-        // qty (lots) = riskAmt / (slDist * 100)  [since $1 per 0.01 per lot]
-        qty      = rAmt / (slDist * 100);
-        qtyLabel = `Lots · Gold ($${(slDist*100).toFixed(0)}/lot SL cost)`;
-    } else if (['EURUSD','GBPUSD','AUDUSD','NZDUSD','USDCAD','USDCHF','USDJPY'].includes(asset)) {
-        // Forex: 1 standard lot = $10/pip. SL in price = pips for 4-decimal pairs
-        const pipValue = asset.includes('JPY') ? slDist * 100 : slDist * 10000;
-        qty      = rAmt / (pipValue * 10); // $10 per pip per lot
-        qtyLabel = `Lots · Forex (${pipValue.toFixed(1)} pips SL)`;
-    } else if (['NAS100','US30','SPX500'].includes(asset)) {
-        // Indices: $1/point per lot typically (varies by broker)
-        qty      = rAmt / (slDist * 1);
-        qtyLabel = `Units · Index ($1/pt)`;
-    } else if (asset === 'BTCUSD') {
-        qty      = rAmt / (slDist * 1);
-        qtyLabel = `BTC units`;
-    } else {
-        qty = rAmt / slDist;
-        qtyLabel = `Units`;
-    }
-
+    const qty = rAmt / slDist;
     lockQty = qty;
-    if (qtyEl)  qtyEl.textContent  = qty < 1 ? qty.toFixed(3) : qty.toFixed(2);
-    if (lblEl)  lblEl.textContent  = qtyLabel;
+
+    if (qtyEl) qtyEl.textContent = qty.toFixed(4);
+    if (lblEl) lblEl.textContent = `${(node.curr||'$')}${rAmt.toFixed(2)} ÷ ${slDist.toFixed(5)} = ${qty.toFixed(4)} units`;
 };
 
 // ── CONFLICT DETECTION ──

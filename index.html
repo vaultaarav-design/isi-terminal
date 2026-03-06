@@ -538,16 +538,15 @@
         </div>
 
         <!-- 🔒 LOCK RISK + LOCK QTY BANNER (RGB animated) -->
-        <div id="lockRiskBanner" style="display:none;background:#000;border-radius:8px;padding:14px 18px;margin-bottom:14px;
-             text-align:center;border:2px solid transparent;
-             animation:rgbBorder 3s linear infinite;">
+        <div id="lockRiskBanner" style="display:none;background:#000;border-radius:6px;padding:8px 14px;margin-bottom:12px;
+             border:1px solid transparent;animation:rgbBorder 3s linear infinite;font-size:0.72rem;">
             <style>
                 @keyframes rgbBorder {
-                    0%   { border-color: #ff0040; box-shadow: 0 0 10px #ff004044; }
-                    25%  { border-color: #ff8800; box-shadow: 0 0 10px #ff880044; }
-                    50%  { border-color: #00c8ff; box-shadow: 0 0 10px #00c8ff44; }
-                    75%  { border-color: #a855f7; box-shadow: 0 0 10px #a855f744; }
-                    100% { border-color: #ff0040; box-shadow: 0 0 10px #ff004044; }
+                    0%   { border-color: #ff0040; box-shadow: 0 0 6px #ff004033; }
+                    25%  { border-color: #ff8800; box-shadow: 0 0 6px #ff880033; }
+                    50%  { border-color: #00c8ff; box-shadow: 0 0 6px #00c8ff33; }
+                    75%  { border-color: #a855f7; box-shadow: 0 0 6px #a855f733; }
+                    100% { border-color: #ff0040; box-shadow: 0 0 6px #ff004033; }
                 }
                 @keyframes rgbText {
                     0%   { color: #ff0040; }
@@ -557,18 +556,13 @@
                     100% { color: #ff0040; }
                 }
             </style>
-            <div style="font-size:0.55rem;color:#555;letter-spacing:3px;margin-bottom:8px;">🔒 LOCKED FROM PRE-ENTRY</div>
-            <div style="display:flex;justify-content:center;gap:40px;align-items:center;">
-                <div>
-                    <div style="font-size:0.6rem;color:#555;letter-spacing:1px;margin-bottom:4px;">LOCK RISK</div>
-                    <div id="lbRiskAmt" style="font-size:1.8rem;font-weight:900;font-family:monospace;letter-spacing:2px;animation:rgbText 3s linear infinite;">—</div>
-                </div>
-                <div style="font-size:1.5rem;color:#222;">|</div>
-                <div>
-                    <div style="font-size:0.6rem;color:#555;letter-spacing:1px;margin-bottom:4px;">LOCK QUANTITY</div>
-                    <div id="lbQty" style="font-size:1.8rem;font-weight:900;font-family:monospace;letter-spacing:2px;animation:rgbText 3s linear infinite;animation-delay:1.5s;">—</div>
-                </div>
-            </div>
+            <span style="color:#555;">🔒 LOCK:</span>
+            &nbsp;
+            <span style="color:#555;">RISK</span>
+            <b id="lbRiskAmt" style="font-family:monospace;font-weight:900;animation:rgbText 3s linear infinite;">—</b>
+            &nbsp;&nbsp;
+            <span style="color:#555;">QTY</span>
+            <b id="lbQty" style="font-family:monospace;font-weight:900;animation:rgbText 3s linear infinite;animation-delay:1.5s;">—</b>
         </div>
 
         <!-- STAR CHECKLIST — 8 items with RGB stars -->
