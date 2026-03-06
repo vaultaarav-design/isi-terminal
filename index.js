@@ -118,23 +118,11 @@ function updateClock() {
         if (!n) return;
         const isSel = card.classList.contains('node-selected');
 
-        // Multi-slot support: pick active/next slot
-        const slots = getDaySlots(n, dayName);
-        const nowMin = now.getHours() * 60 + now.getMinutes();
-        // find the best slot: active first, then next upcoming, then first
-        let tt = slots[0] || {};
-        for (const s of slots) {
-            const sStart = timeToMinutes(s.start);
-            const sEnd   = timeToMinutes(s.end);
-            const sExp   = timeToMinutes(s.expire);
-            if (sStart !== null && nowMin >= sStart && (sExp === null || nowMin < sExp)) { tt = s; break; }
-        }
-        // fallback: pick next upcoming
-        if (!tt.start) {
-            for (const s of slots) {
-                if (timeToMinutes(s.start) !== null && nowMin < timeToMinutes(s.start)) { tt = s; break; }
-            }
-        }
+        // Ab har card ek specific slot ka hai — data-slot se directly read karo
+        const slots   = getDaySlots(n, dayName);
+        const slotIdx = parseInt(card.dataset.slot) || 0;
+        const tt      = slots[slotIdx] || slots[0] || {};
+        const nowMin  = now.getHours() * 60 + now.getMinutes();
 
         const startMin  = timeToMinutes(tt.start);
         const endMin    = timeToMinutes(tt.end);
@@ -240,12 +228,13 @@ function renderTimerSlider() {
     let todayCards = [];
     entries.forEach(([cId, cluster]) => {
         cluster.nodes.forEach((node, nIdx) => {
-            // Multi-slot: include if ANY slot has a start time today
+            // Har slot ke liye ALAG card — ek account ke 2 slots = 2 cards
             const slots = getDaySlots(node, dayName);
-            if (slots.length > 0) {
-                // times = first slot for display; all slots passed for richer display
-                todayCards.push({ cId, cluster, node, nIdx, times: slots[0], slots });
-            }
+            slots.forEach((slot, slotIdx) => {
+                if (slot.start) {  // sirf wahi slot jiska start time set hai
+                    todayCards.push({ cId, cluster, node, nIdx, slot, slotIdx, totalSlots: slots.length });
+                }
+            });
         });
     });
 
@@ -255,21 +244,20 @@ function renderTimerSlider() {
         return;
     }
 
-    todayCards.forEach(({ cId, cluster, node, nIdx, times, slots }) => {
-        const s       = getNodeStats(cId, nIdx);
-        const liveBal = s.currentBal ?? node.balance ?? 0;
-        const riskAmt = (liveBal * (node.risk || 0) / 100).toFixed(0);
+    todayCards.forEach(({ cId, cluster, node, nIdx, slot, slotIdx, totalSlots }) => {
+        const st      = getNodeStats(cId, nIdx);
+        const liveBal = st.currentBal ?? node.balance ?? 0;
+        const slotRisk = slot.risk || node.risk || 0.35;
+        const riskAmt  = (liveBal * slotRisk / 100).toFixed(0);
+        const slotLabel = totalSlots > 1 ? ` · Slot ${slotIdx + 1}/${totalSlots}` : '';
+
         grid.innerHTML += `
-            <div class="s-timer-card stc-landscape" data-cluster="${cId}" data-node="${nIdx}">
+            <div class="s-timer-card stc-landscape" data-cluster="${cId}" data-node="${nIdx}" data-slot="${slotIdx}">
                 <div class="stc-left">
                     <div class="stc-cluster">${cluster.title}</div>
-                    <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}</div>
-                    <div class="stc-window">${
-                        (slots||[times]).map((s,si) =>
-                            `<span style="color:${si===0?'var(--gold)':'#666'};font-size:0.62rem;">[${s.start||'--'}→${s.expire||s.end||'--'} ${s.risk||node.risk}%]</span>`
-                        ).join(' ')
-                    }</div>
-                    <div class="stc-risk">${node.curr}${riskAmt} risk · Qty ${node.qtyFrom}–${node.qtyTo}</div>
+                    <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}${slotLabel}</div>
+                    <div class="stc-window">${slot.start||'--'} → ${slot.end||'--'} → ${slot.expire||'--'}</div>
+                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${slotRisk}% · Qty ${node.qtyFrom}–${node.qtyTo}</div>
                 </div>
                 <div class="stc-right">
                     <div class="stc-status-text tc-status-text">LOADING</div>
@@ -430,16 +418,33 @@ function updateSelectedInfoBar() {
 
     const s        = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal  = s.currentBal ?? n.balance ?? 0;
-    const rAmt     = (liveBal * (n.risk || 0) / 100).toFixed(2);
-    const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const slots    = getDaySlots(n, dayName);
-    const timeWindow = slots.length
-        ? slots.map((s,i)=>`Slot${i+1}: ${s.start||'--'}→${s.expire||s.end||'--'} (${s.risk||n.risk}%)`).join(' | ')
+    const dayNameIB = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const slotsIB   = getDaySlots(n, dayNameIB);
+    const nowMinIB  = new Date().getHours() * 60 + new Date().getMinutes();
+    // Find active slot
+    let activeRiskIB = n.risk || 0.35;
+    let activeSlotNumIB = 0;
+    for (let si = 0; si < slotsIB.length; si++) {
+        const ss = timeToMinutes(slotsIB[si].start);
+        const se = timeToMinutes(slotsIB[si].expire || slotsIB[si].end);
+        if (ss !== null && nowMinIB >= ss && (se === null || nowMinIB < se)) {
+            activeRiskIB = slotsIB[si].risk || activeRiskIB;
+            activeSlotNumIB = si + 1; break;
+        }
+    }
+    const rAmt = (liveBal * activeRiskIB / 100).toFixed(2);
+    const timeWindow = slotsIB.length
+        ? slotsIB.map((sl,i) => {
+            const ss = timeToMinutes(sl.start);
+            const se = timeToMinutes(sl.expire||sl.end);
+            const isAct = ss !== null && nowMinIB >= ss && (se === null || nowMinIB < se);
+            return `${isAct?'▶ ':''}Slot${i+1}: ${sl.start||'--'}→${sl.expire||sl.end||'--'} (${sl.risk||n.risk}%)`;
+          }).join(' | ')
         : 'Not set';
 
     document.getElementById('sibName').textContent    = n.title || ('Account ' + (selectedNodeIdx + 1));
     document.getElementById('sibBal').textContent     = `${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    document.getElementById('sibRisk').textContent    = `${n.risk}%`;
+    document.getElementById('sibRisk').textContent    = `${activeRiskIB}% (slot ${activeSlotNumIB||'—'})`;
     document.getElementById('sibQty').textContent     = `${n.qtyFrom} – ${n.qtyTo}`;
     document.getElementById('sibTime').textContent    = timeWindow;
     document.getElementById('sibRiskAmt').textContent = `${n.curr}${rAmt}`;
@@ -472,7 +477,19 @@ window.updateRiskCalc = function () {
     const asset   = document.getElementById('assetSelect').value;
     const s       = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal = s.currentBal ?? n.balance ?? 0;
-    const rAmt    = liveBal * (n.risk || 0) / 100;
+    // Use active slot risk% if available, else fallback to node default
+    const dayName2 = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const slots2   = getDaySlots(n, dayName2);
+    const nowMin2  = new Date().getHours() * 60 + new Date().getMinutes();
+    let activeRisk2 = n.risk || 0.35;
+    for (const sl of slots2) {
+        const ss = timeToMinutes(sl.start);
+        const se = timeToMinutes(sl.expire || sl.end);
+        if (ss !== null && nowMin2 >= ss && (se === null || nowMin2 < se)) {
+            activeRisk2 = sl.risk || activeRisk2; break;
+        }
+    }
+    const rAmt = liveBal * activeRisk2 / 100;
     let hint      = '';
 
     if (asset === 'XAUUSD') {
@@ -487,7 +504,7 @@ window.updateRiskCalc = function () {
     document.getElementById('accountInfo').innerHTML = `
         <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
             <span>ACC: <b>${n.title||'Account '+(selectedNodeIdx+1)}</b></span>
-            <span>RISK AMT: <b style="color:var(--accent)">${n.curr}${rAmt.toFixed(2)}</b></span>
+            <span>RISK AMT: <b style="color:var(--accent)">${n.curr}${rAmt.toFixed(2)}</b> <span style="color:#555;font-size:0.65rem;">(${activeRisk2}% active)</span></span>
             <span>LIVE BAL: <b style="color:var(--gold)">${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></span>
         </div>
         <div style="margin-top:4px;font-size:0.75rem;color:#aaa;">${hint}</div>`;

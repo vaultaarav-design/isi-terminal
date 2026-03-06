@@ -89,11 +89,11 @@ window.buildNodeUI = function(existingNodes = null) {
     const sel  = document.getElementById('nodeQty');
     const wrap = document.getElementById('customNodeWrap');
     if (sel.value === 'custom') {
-        wrap.style.display = 'flex';
+        if (wrap) wrap.style.display = 'flex';
         document.getElementById('nodeGrid').innerHTML = '';
         return;
     }
-    wrap.style.display = 'none';
+    if (wrap) wrap.style.display = 'none';
     const qty  = parseInt(sel.value);
     const grid = document.getElementById('nodeGrid');
     grid.innerHTML = '';
@@ -111,7 +111,6 @@ window.buildNodeUI = function(existingNodes = null) {
             if (Array.isArray(rawT)) {
                 slots = rawT;
             } else if (rawT && rawT.start) {
-                // Migrate old single-slot to array
                 slots = [{ start: rawT.start, end: rawT.end || '', expire: rawT.expire || '', risk: ex.risk ?? 0.35 }];
             } else {
                 slots = [{ start: '', end: '', expire: '', risk: ex.risk ?? 0.35 }];
@@ -119,27 +118,134 @@ window.buildNodeUI = function(existingNodes = null) {
 
             const slotsHtml = slots.map((s, si) => `
                 <div class="time-slot" data-day="${day}" data-node="${i}" data-slot="${si}" style="display:grid;grid-template-columns:1fr 1fr 1fr 60px 22px;gap:3px;margin-bottom:3px;align-items:center;">
-                    <input type="time" class="slot-start"  value="${s.start||''}" placeholder="Start">
-                    <input type="time" class="slot-end"    value="${s.end||''}"   placeholder="End">
-                    <input type="time" class="slot-expire" value="${s.expire||''}" placeholder="Expire">
-                    <input type="number" class="slot-risk" value="${s.risk ?? ex.risk ?? 0.35}" step="0.01" min="0.01" max="10" title="Risk % for this slot" style="width:100%;padding:4px;background:#000;border:1px solid #444;color:#fff;font-size:0.65rem;border-radius:3px;" placeholder="Risk%">
-                    <button type="button" onclick="removeSlot(this)" style="background:#3a0000;color:#ff5252;border:1px solid #ff5252;border-radius:3px;cursor:pointer;font-size:0.7rem;width:22px;height:22px;padding:0;flex-shrink:0;" title="Remove slot">✕</button>
+                    <input type="time" class="slot-start"  value="${s.start||''}" >
+                    <input type="time" class="slot-end"    value="${s.end||''}"   >
+                    <input type="time" class="slot-expire" value="${s.expire||''}" >
+                    <input type="number" class="slot-risk" value="${s.risk ?? ex.risk ?? 0.35}" step="0.01" min="0.01" max="10" title="Risk % for this slot" style="width:100%;padding:4px;background:#000;border:1px solid #444;color:#fff;font-size:0.65rem;border-radius:3px;" placeholder="R%">
+                    <button type="button" onclick="removeSlot(this)" style="background:#3a0000;color:#ff5252;border:1px solid #ff5252;border-radius:3px;cursor:pointer;font-size:0.7rem;width:22px;height:22px;padding:0;" title="Remove">✕</button>
                 </div>`).join('');
 
             dayHtml += `
             <div class="day-card" style="padding-bottom:6px;">
                 <div class="day-name" style="display:flex;justify-content:space-between;align-items:center;">
                     <span>${day}</span>
-                    <button type="button" onclick="addSlot(this,'${day}',${i})" 
-                        style="background:transparent;color:var(--gold);border:1px dashed var(--gold);border-radius:3px;font-size:0.55rem;padding:1px 5px;cursor:pointer;white-space:nowrap;" title="Add time slot">+ slot</button>
+                    <button type="button" onclick="addSlot(this,'${day}',${i})"
+                        style="background:transparent;color:var(--gold);border:1px dashed var(--gold);border-radius:3px;font-size:0.55rem;padding:1px 5px;cursor:pointer;" title="Add slot">+ slot</button>
                 </div>
-                <div style="font-size:0.55rem;color:#444;display:grid;grid-template-columns:1fr 1fr 1fr 60px 22px;gap:3px;margin:4px 0 3px;padding:0 1px;">
+                <div style="font-size:0.55rem;color:#444;display:grid;grid-template-columns:1fr 1fr 1fr 60px 22px;gap:3px;margin:4px 0 3px;">
                     <span>Start</span><span>End</span><span>Expire</span><span>Risk%</span><span></span>
                 </div>
                 <div class="slots-container" data-day="${day}" data-node="${i}">
                     ${slotsHtml}
                 </div>
             </div>`;
+        });
+
+        grid.innerHTML += `
+        <div class="node-setup-card">
+            <div class="input-row">
+                <input type="text"   class="node-title"   placeholder="Account Name" value="${ex.title || 'Account ' + (i + 1)}">
+                <select class="node-curr">
+                    <option value="$" ${(ex.curr || '$') === '$' ? 'selected' : ''}>$ USD</option>
+                    <option value="₹" ${(ex.curr || '') === '₹' ? 'selected' : ''}>₹ INR</option>
+                </select>
+                <input type="number" class="node-balance" placeholder="Setup Balance" value="${ex.balance ?? 100000}" title="Initial Capital">
+            </div>
+            <div class="days-grid">${dayHtml}</div>
+            <div class="risk-qty-row">
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <label>Default Risk%</label>
+                    <input type="number" class="node-risk" value="${ex.risk ?? 0.35}" step="0.01" style="width:60px;">
+                </div>
+                <div class="qty-range">
+                    <label>Qty</label>
+                    <input type="number" class="qty-from" value="${ex.qtyFrom ?? 1}"  style="width:45px;">
+                    <span>-</span>
+                    <input type="number" class="qty-to"   value="${ex.qtyTo   ?? 10}" style="width:45px;">
+                </div>
+                <div>
+                    <label>Trade #</label>
+                    <input type="number" class="node-order" value="${ex.order ?? (i + 1)}" style="width:45px;">
+                </div>
+            </div>
+        </div>`;
+    }
+};
+
+// ─────────────────────────────────────────────────────────
+// CUSTOM NODE COUNT APPLY
+// ─────────────────────────────────────────────────────────
+window.applyCustomNodes = function() {
+    const countEl = document.getElementById('customNodeCount');
+    const count   = parseInt(countEl ? countEl.value : 0);
+    if (!count || count < 1 || count > 20) { alert('1 se 20 ke beech count daalo!'); return; }
+    const wrap = document.getElementById('customNodeWrap');
+    if (wrap) wrap.style.display = 'none';
+    // Build grid manually with custom count
+    const grid = document.getElementById('nodeGrid');
+    grid.innerHTML = '';
+    // Temporarily override nodeQty value so buildNodeUI loop uses it
+    const sel = document.getElementById('nodeQty');
+    const origVal = sel.value;
+    // We manually build using the same template logic as buildNodeUI
+    // Reuse buildNodeUI by faking qty via data attribute
+    sel.dataset.customCount = count;
+    // Call a minimal inline build
+    for (let i = 0; i < count; i++) {
+        let dayHtml = '';
+        ['MON','TUE','WED','THU','FRI'].forEach(day => {
+            dayHtml += `
+            <div class="day-card" style="padding-bottom:6px;">
+                <div class="day-name" style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>${day}</span>
+                    <button type="button" onclick="addSlot(this,'${day}',${i})"
+                        style="background:transparent;color:var(--gold);border:1px dashed var(--gold);border-radius:3px;font-size:0.55rem;padding:1px 5px;cursor:pointer;">+ slot</button>
+                </div>
+                <div style="font-size:0.55rem;color:#444;display:grid;grid-template-columns:1fr 1fr 1fr 60px 22px;gap:3px;margin:4px 0 3px;">
+                    <span>Start</span><span>End</span><span>Expire</span><span>Risk%</span><span></span>
+                </div>
+                <div class="slots-container" data-day="${day}" data-node="${i}">
+                    <div class="time-slot" data-day="${day}" data-node="${i}" data-slot="0" style="display:grid;grid-template-columns:1fr 1fr 1fr 60px 22px;gap:3px;margin-bottom:3px;align-items:center;">
+                        <input type="time" class="slot-start" value="">
+                        <input type="time" class="slot-end"   value="">
+                        <input type="time" class="slot-expire" value="">
+                        <input type="number" class="slot-risk" value="0.35" step="0.01" min="0.01" max="10" style="width:100%;padding:4px;background:#000;border:1px solid #444;color:#fff;font-size:0.65rem;border-radius:3px;" placeholder="R%">
+                        <button type="button" onclick="removeSlot(this)" style="background:#3a0000;color:#ff5252;border:1px solid #ff5252;border-radius:3px;cursor:pointer;font-size:0.7rem;width:22px;height:22px;padding:0;">✕</button>
+                    </div>
+                </div>
+            </div>`;
+        });
+        grid.innerHTML += `
+        <div class="node-setup-card">
+            <div class="input-row">
+                <input type="text"   class="node-title"   placeholder="Account Name" value="Account ${i+1}">
+                <select class="node-curr">
+                    <option value="$" selected>$ USD</option>
+                    <option value="₹">₹ INR</option>
+                </select>
+                <input type="number" class="node-balance" placeholder="Setup Balance" value="100000">
+            </div>
+            <div class="days-grid">${dayHtml}</div>
+            <div class="risk-qty-row">
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <label>Default Risk%</label>
+                    <input type="number" class="node-risk" value="0.35" step="0.01" style="width:60px;">
+                </div>
+                <div class="qty-range">
+                    <label>Qty</label>
+                    <input type="number" class="qty-from" value="1"  style="width:45px;">
+                    <span>-</span>
+                    <input type="number" class="qty-to"   value="10" style="width:45px;">
+                </div>
+                <div>
+                    <label>Trade #</label>
+                    <input type="number" class="node-order" value="${i+1}" style="width:45px;">
+                </div>
+            </div>
+        </div>`;
+    }
+};
+
 // ─────────────────────────────────────────────────────────
 // ADD / REMOVE SLOT HELPERS
 // ─────────────────────────────────────────────────────────
@@ -213,7 +319,8 @@ document.getElementById('btnDeploy').onclick = async () => {
     const title = document.getElementById('deskTitle').value.trim();
     const pass  = document.getElementById('resetKey').value.trim();
     if (!title || !pass) return alert('Cluster Name aur Security Key daalo!');
-    if (parseInt(document.getElementById('nodeQty').value) === 0) return alert('Nodes select karo!');
+    const nodeCards = document.querySelectorAll('.node-setup-card');
+    if (!nodeCards.length) return alert('Nodes select karo!');
 
     const btn = document.getElementById('btnDeploy');
     btn.textContent = editingClusterId ? 'UPDATING...' : 'DEPLOYING...';

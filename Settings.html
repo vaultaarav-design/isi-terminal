@@ -73,12 +73,23 @@
             <h3 style="color: var(--gold); margin-bottom:15px;">CLUSTER SETUP</h3>
             <input type="text" id="deskTitle" placeholder="Cluster Name (e.g. ALPHA FUND)" style="width:100%; padding:12px; background:#000; border:2px solid var(--gold); border-radius:6px; font-size:1rem;">
             
-            <select id="nodeQty" onchange="buildNodeUI()" style="width:100%; padding:12px; background:#000; color:#fff; border:2px solid var(--gold); border-radius:6px; margin:15px 0; font-size:1rem;">
-                <option value="0">Select Nodes</option>
-                <option value="1">1 Node</option>
-                <option value="3">3 Nodes</option>
-                <option value="5">5 Nodes</option>
-            </select>
+            <div style="display:flex;gap:8px;margin:15px 0;align-items:center;">
+                <select id="nodeQty" onchange="buildNodeUI()" style="flex:1; padding:12px; background:#000; color:#fff; border:2px solid var(--gold); border-radius:6px; font-size:1rem;">
+                    <option value="0">Select Nodes</option>
+                    <option value="1">1 Node</option>
+                    <option value="2">2 Nodes</option>
+                    <option value="3">3 Nodes</option>
+                    <option value="5">5 Nodes</option>
+                    <option value="10">10 Nodes</option>
+                    <option value="custom">Custom...</option>
+                </select>
+                <div id="customNodeWrap" style="display:none;align-items:center;gap:6px;">
+                    <input type="number" id="customNodeCount" min="1" max="20" placeholder="Count" 
+                        style="width:80px;padding:12px;background:#000;color:#fff;border:2px solid var(--gold);border-radius:6px;font-size:1rem;"
+                        onchange="applyCustomNodes()">
+                    <button onclick="applyCustomNodes()" style="padding:12px 14px;background:var(--gold);color:#000;border:none;border-radius:6px;font-weight:bold;cursor:pointer;white-space:nowrap;">✓ SET</button>
+                </div>
+            </div>
             
             <div id="nodeGrid"></div>
 
