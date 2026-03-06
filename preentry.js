@@ -178,9 +178,23 @@ function renderPeTimerSlider() {
             <div style="font-size:0.65rem;color:#888;">${slot.start||'--'} → ${slot.expire||slot.end||'--'}</div>
             <div style="font-size:0.62rem;color:var(--accent);margin-top:3px;">${slot.risk||0.35}% risk</div>
             <div style="font-size:0.68rem;font-weight:bold;color:${stColor};margin-top:4px;">${stText}</div>`;
-        card.onclick = () => selectPeSlot(cId, nIdx, slotIdx);
+        card.dataset.cid     = cId;
+        card.dataset.nidx    = nIdx;
+        card.dataset.slotidx = slotIdx;
         grid.appendChild(card);
     });
+
+    // Seamless loop — duplicate all cards (cloneNode)
+    Array.from(grid.children).forEach(c => grid.appendChild(c.cloneNode(true)));
+
+    // Event delegation — original + cloned cards dono ke liye
+    grid.onclick = (e) => {
+        const c = e.target.closest('[data-cid]');
+        if (c) selectPeSlot(c.dataset.cid, parseInt(c.dataset.nidx), parseInt(c.dataset.slotidx));
+    };
+
+    // Dynamic speed: ~4s per card, 8s min, 25s max
+    grid.style.animationDuration = Math.max(8, Math.min(25, cards.length * 4)) + 's';
 }
 
 // When a timer card is clicked in preentry slider

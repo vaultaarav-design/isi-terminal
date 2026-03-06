@@ -144,7 +144,8 @@
 #proceedBtn.conflict { background:linear-gradient(135deg,#1a0800,#3a1400);
     color:#ff6600; border:2px solid #ff6600; }
 
-@keyframes readyPulse {
+@keyframes autoSlide { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        @keyframes readyPulse {
     0%,100% { box-shadow:0 0 20px rgba(0,200,5,0.3); }
     50%     { box-shadow:0 0 40px rgba(0,200,5,0.6); }
 }
@@ -207,8 +208,9 @@
 <div class="container">
 
 <!-- TIMER SLIDER — same as dashboard, shows today's scheduled slots -->
-<div id="peTimerSliderWrap" style="margin-bottom:12px;">
-    <div id="peTimerSlider" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0;"></div>
+<div id="peTimerSliderWrap" style="margin-bottom:12px;overflow:hidden;background:#080808;border:1px solid #1a1a1a;border-radius:6px;padding:10px 0;">
+    <div id="peTimerSlider" style="display:flex;gap:12px;padding:0 12px;animation:autoSlide 18s linear infinite;width:max-content;">
+    </div>
 </div>
 
 <!-- SLOT SELECTOR — appears when account has 2+ slots -->

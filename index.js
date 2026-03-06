@@ -268,13 +268,16 @@ function renderTimerSlider() {
             </div>`;
     });
 
-    // Duplicate for seamless scroll if enough cards
-    if (todayCards.length > 2) {
-        grid.innerHTML += grid.innerHTML;
-        grid.classList.remove('no-anim');
-    } else {
-        grid.classList.add('no-anim');
-    }
+    // Seamless infinite scroll — hamesha duplicate karo (1 card ho ya 10)
+    // Taaki translateX(-50%) loop perfectly work kare bina reset ke
+    const originalHTML = grid.innerHTML;
+    grid.innerHTML = originalHTML + originalHTML; // exact duplicate
+
+    // Speed: cards ki count ke hisaab se — kam cards = faster (warna gap dikhta hai)
+    const cardCount = todayCards.length;
+    const speed = Math.max(8, Math.min(25, cardCount * 4)); // 8s min, 25s max, ~4s per card
+    grid.style.animationDuration = speed + 's';
+    grid.classList.remove('no-anim');
 
     highlightSelectedCard();
 }
