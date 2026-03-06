@@ -572,12 +572,13 @@ import { getDatabase as _getDB, ref as _ref, onValue as _onVal, push as _push, r
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const _kbDB = _getDB();
-let _kbEntries  = {};
-let _kbEditKey  = null;
+let _kbEntries   = {};
+let _kbEditKey   = null;
 let _kbActiveCat = 'ALL';
-let _kbFileData  = null;   // { name, type, size, base64, ext }
-let _kbSubCount  = 0;      // sub-section counter
+let _kbFileData  = null;     // { file(raw), name, type, size, ext } OR { url, name, ... } for existing
+let _kbSubCount  = 0;        // sub-section counter
 let _kbActiveTab = 'upload'; // 'upload' | 'text'
+const _kbSubFiles = new Map(); // key: subCount → raw File object
 
 _onVal(_ref(_kbDB, 'isi_v6/knowledge/entries'), snap => {
     _kbEntries = snap.val() || {};
@@ -706,13 +707,16 @@ window.switchSubTab = function(n, tab) {
 window.handleSubFile = function(n, file) {
     if (!file) return;
     const ext = file.name.split('.').pop().toLowerCase();
+    // Store raw File in Map (DOM dataset can't hold File objects)
+    _kbSubFiles.set(String(n), file);
     const prev = document.getElementById('subFilePreview_' + n);
     prev.style.display = 'block';
-    prev.innerHTML = `${getFileIcon(ext)} <b>${file.name}</b> (${(file.size/1024/1024).toFixed(2)}MB)`;
+    prev.innerHTML = `${getFileIcon(ext)} <b>${file.name}</b> · ${(file.size/1024/1024).toFixed(2)}MB
+        <span style="font-size:0.58rem;color:#00c805;margin-left:6px;">✓ Ready to upload</span>`;
     prev.dataset.name = file.name;
     prev.dataset.type = file.type;
     prev.dataset.ext  = ext;
-    prev._file = file; // store raw file reference
+    prev.dataset.hasFile = 'true';
 };
 
 // ── RENDER LIST ──
@@ -808,6 +812,7 @@ window.openKBAddEntry = function() {
     _kbEditKey = null;
     _kbFileData = null;
     _kbSubCount = 0;
+    _kbSubFiles.clear();
     document.getElementById('kbModalHeading').textContent = 'ADD NEW ENTRY';
     ['kbEntryTitle','kbEntryDesc','kbEntryContent','kbEntryTags'].forEach(id => {
         const el = document.getElementById(id); if(el) el.value='';
@@ -817,6 +822,7 @@ window.openKBAddEntry = function() {
     clearKBFile();
     buildKBLinkDropdown();
     switchKBTab('upload');
+    setSaveStatus('💾 SAVE TO FIREBASE', false);
     const m = document.getElementById('kbAddModal');
     m.style.display = 'flex';
     setTimeout(() => document.getElementById('kbEntryTitle').focus(), 100);
@@ -855,14 +861,34 @@ window.closeKBModal = function() {
     document.getElementById('kbAddModal').style.display = 'none';
     _kbEditKey = null;
     _kbFileData = null;
+    _kbSubFiles.clear();
+    _kbSubCount = 0;
+    // Reset button state
+    const btn = document.querySelector('button[onclick="saveKBEntry()"]');
+    if (btn) { btn.textContent = '💾 SAVE TO FIREBASE'; btn.disabled = false; }
 };
 
 // ── UPLOAD FILE TO FIREBASE STORAGE ──
-async function uploadFileToStorage(file, path) {
-    const storageRef = sRef(storage, path);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-    return url;
+async function uploadFileToStorage(file, storagePath) {
+    try {
+        const storageRef = sRef(storage, storagePath);
+        const snap = await uploadBytes(storageRef, file);
+        const url  = await getDownloadURL(snap.ref);
+        return url;
+    } catch (err) {
+        console.error('Storage upload error:', err);
+        throw new Error('File upload failed: ' + err.message);
+    }
+}
+
+// ── SHOW SAVE STATUS ──
+function setSaveStatus(msg, isError) {
+    const btn = document.querySelector('button[onclick="saveKBEntry()"]');
+    if (!btn) return;
+    btn.textContent = msg;
+    btn.disabled = !isError;
+    btn.style.background = isError ? 'var(--danger)' : (msg.includes('⏳') ? '#5a4000' : 'var(--gold)');
+    btn.style.color = isError ? '#fff' : (msg.includes('⏳') ? '#c5a059' : '#000');
 }
 
 // ── SAVE ENTRY ──
@@ -870,40 +896,62 @@ window.saveKBEntry = async function() {
     const title = document.getElementById('kbEntryTitle').value.trim();
     if (!title) { alert('Title required!'); return; }
 
-    const btn = document.querySelector('button[onclick="saveKBEntry()"]');
-    if (btn) { btn.textContent = '⏳ Uploading...'; btn.disabled = true; }
+    setSaveStatus('⏳ Preparing...', false);
 
     try {
-        const entryId = _kbEditKey || ('kb_' + Date.now());
+        const entryId = _kbEditKey || ('kb_' + Date.now().toString(36));
 
-        // Upload main file to Storage if present
+        // ── Upload MAIN file ──
         let fileData = null;
         if (_kbActiveTab === 'upload' && _kbFileData?.file) {
-            const path = `knowledge/${entryId}/main_${_kbFileData.name}`;
-            if (btn) btn.textContent = '⏳ Uploading file...';
-            const url = await uploadFileToStorage(_kbFileData.file, path);
-            fileData = { url, name: _kbFileData.name, type: _kbFileData.type, ext: _kbFileData.ext, size: _kbFileData.size, path };
-        } else if (_kbEditKey && _kbFileData?.url) {
-            fileData = _kbFileData; // keep existing
+            const safeName = _kbFileData.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const storagePath = `knowledge/${entryId}/main_${safeName}`;
+            setSaveStatus(`⏳ Uploading "${_kbFileData.name}"...`, false);
+            const url = await uploadFileToStorage(_kbFileData.file, storagePath);
+            fileData = {
+                url,
+                name:  _kbFileData.name,
+                type:  _kbFileData.type || '',
+                ext:   _kbFileData.ext  || '',
+                size:  _kbFileData.size || 0,
+                path:  storagePath
+            };
+        } else if (_kbFileData?.url) {
+            fileData = _kbFileData; // existing file, keep as-is
         }
 
-        // Upload sub-section files
+        // ── Upload SUB-SECTION files ──
         const subs = {};
-        const subEls = document.querySelectorAll('[data-sub-title]');
-        for (const el of subEls) {
+        const subTitleEls = document.querySelectorAll('[data-sub-title]');
+        let subIdx = 0;
+        for (const el of subTitleEls) {
+            subIdx++;
             const n   = el.dataset.subTitle;
-            const txt = document.querySelector(`[data-sub-text="${n}"]`)?.value?.trim() || '';
+            const txt = (document.querySelector(`[data-sub-text="${n}"]`)?.value || '').trim();
             const fp  = document.getElementById('subFilePreview_' + n);
             let subFile = null;
-            if (fp && fp.style.display !== 'none' && fp._file) {
-                const subPath = `knowledge/${entryId}/sub${n}_${fp.dataset.name}`;
-                if (btn) btn.textContent = `⏳ Uploading sub-file ${n}...`;
-                const subUrl = await uploadFileToStorage(fp._file, subPath);
-                subFile = { url: subUrl, name: fp.dataset.name, type: fp.dataset.type, ext: fp.dataset.ext, path: subPath };
-            } else if (fp && fp.dataset.url) {
+
+            const rawFile = _kbSubFiles.get(String(n));
+            if (rawFile) {
+                const safeSub = rawFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const subPath = `knowledge/${entryId}/sub${n}_${safeSub}`;
+                setSaveStatus(`⏳ Uploading sub-file ${subIdx}/${subTitleEls.length}...`, false);
+                const subUrl = await uploadFileToStorage(rawFile, subPath);
+                subFile = {
+                    url:  subUrl,
+                    name: fp?.dataset?.name || rawFile.name,
+                    type: fp?.dataset?.type || rawFile.type,
+                    ext:  fp?.dataset?.ext  || rawFile.name.split('.').pop().toLowerCase(),
+                    path: subPath
+                };
+            } else if (fp?.dataset?.url) {
+                // existing sub file
                 subFile = { url: fp.dataset.url, name: fp.dataset.name, type: fp.dataset.type, ext: fp.dataset.ext };
             }
-            subs['sub' + n] = { title: el.value.trim(), text: txt, file: subFile };
+
+            if (el.value.trim() || txt || subFile) {
+                subs['sub' + n] = { title: el.value.trim(), text: txt, file: subFile };
+            }
         }
 
         const entry = {
@@ -912,13 +960,15 @@ window.saveKBEntry = async function() {
             desc:        document.getElementById('kbEntryDesc').value.trim(),
             tags:        document.getElementById('kbEntryTags').value.trim(),
             linkedTo:    document.getElementById('kbEntryLink').value || '',
-            content:     _kbActiveTab === 'text' ? (document.getElementById('kbEntryContent').value.trim()) : '',
+            content:     _kbActiveTab === 'text'
+                            ? (document.getElementById('kbEntryContent').value.trim())
+                            : '',
             file:        fileData,
             subSections: Object.keys(subs).length ? subs : null,
             updatedAt:   new Date().toISOString()
         };
 
-        if (btn) btn.textContent = '⏳ Saving to DB...';
+        setSaveStatus('⏳ Saving to database...', false);
 
         if (_kbEditKey) {
             await update(ref(db, `isi_v6/knowledge/entries/${_kbEditKey}`), entry);
@@ -926,12 +976,14 @@ window.saveKBEntry = async function() {
             entry.createdAt = new Date().toISOString();
             await _fbPush(ref(db, 'isi_v6/knowledge/entries'), entry);
         }
-        closeKBModal();
+
+        setSaveStatus('✅ Saved!', false);
+        setTimeout(() => closeKBModal(), 600);
+
     } catch(err) {
-        alert('Save failed: ' + err.message);
-        console.error(err);
-    } finally {
-        if (btn) { btn.textContent = '💾 SAVE TO FIREBASE'; btn.disabled = false; }
+        console.error('saveKBEntry error:', err);
+        setSaveStatus('❌ ' + (err.message.slice(0, 40)), true);
+        setTimeout(() => setSaveStatus('💾 SAVE TO FIREBASE', false), 3000);
     }
 };
 
