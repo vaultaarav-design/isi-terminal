@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, update, onValue, remove, get, push as _fbPush } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -563,24 +563,22 @@ window.saveCustomAI = function() {
     buildAIDropdown();
 };
 
-// ═══════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════
 // BLOCK 2 — KNOWLEDGE BASE (Settings page)
+// All DB calls use top-level: db, ref, onValue, update, remove, _fbPush
 // ═══════════════════════════════════════════════════════
-import { getDatabase as _getDB, ref as _ref, onValue as _onVal, push as _push, remove as _rem, update as _upd }
-    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-const _kbDB = _getDB();
 let _kbEntries   = {};
 let _kbEditKey   = null;
 let _kbActiveCat = 'ALL';
-let _kbFileData  = null;     // { file(raw), name, type, size, ext } OR { url, name, ... } for existing
-let _kbSubCount  = 0;        // sub-section counter
-let _kbActiveTab = 'upload'; // 'upload' | 'text'
-const _kbSubFiles = new Map(); // key: subCount → raw File object
+let _kbFileData  = null;        // { file(raw File obj), name, type, size, ext }
+let _kbSubCount  = 0;
+let _kbActiveTab = 'upload';    // 'upload' | 'text'
+const _kbSubFiles = new Map();  // subCount(string) → raw File object
 
-_onVal(_ref(_kbDB, 'isi_v6/knowledge/entries'), snap => {
+// ── Firebase listener ──
+onValue(ref(db, 'isi_v6/knowledge/entries'), snap => {
     _kbEntries = snap.val() || {};
     renderKBList();
     updateKBStats();
@@ -592,21 +590,22 @@ window.onKBCatSelect = function() {
     renderKBList();
 };
 
-// ── FILE ICONS BY EXTENSION ──
+// ── File Icons ──
 function getFileIcon(ext) {
     const m = { pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊',
                 txt:'📃', png:'🖼', jpg:'🖼', jpeg:'🖼', gif:'🖼',
-                webp:'🖼', csv:'📊', ppt:'📋', pptx:'📋' };
-    return m[ext] || '📁';
+                webp:'🖼', csv:'📊', ppt:'📋', pptx:'📋', mp4:'🎬', mp3:'🎵' };
+    return m[(ext||'').toLowerCase()] || '📁';
 }
 
-// ── FILE UPLOAD HANDLERS ──
+// ── Tab switch ──
 window.switchKBTab = function(tab) {
     _kbActiveTab = tab;
     const up = document.getElementById('tabUpload');
     const tx = document.getElementById('tabText');
     const bu = document.getElementById('tabUploadBtn');
     const bt = document.getElementById('tabTextBtn');
+    if (!up || !tx) return;
     if (tab === 'upload') {
         up.style.display = 'block'; tx.style.display = 'none';
         bu.style.cssText += ';border-color:var(--gold);background:#1a1200;color:var(--gold);';
@@ -618,6 +617,7 @@ window.switchKBTab = function(tab) {
     }
 };
 
+// ── Drag & drop ──
 window.handleKBDrop = function(e) {
     e.preventDefault();
     document.getElementById('kbDropZone').style.borderColor = '#333';
@@ -625,6 +625,7 @@ window.handleKBDrop = function(e) {
     if (file) handleKBFile(file);
 };
 
+// ── Main file select ──
 window.handleKBFile = function(file) {
     if (!file) return;
     const ext = file.name.split('.').pop().toLowerCase();
@@ -632,94 +633,258 @@ window.handleKBFile = function(file) {
     document.getElementById('kbFilePreview').style.display = 'block';
     document.getElementById('kbFileIcon').textContent = getFileIcon(ext);
     document.getElementById('kbFileName').textContent = file.name;
-    document.getElementById('kbFileSize').textContent = (file.size/1024/1024).toFixed(2) + ' MB';
+    document.getElementById('kbFileSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
     document.getElementById('kbDropZone').style.display = 'none';
 };
 
 window.clearKBFile = function() {
     _kbFileData = null;
-    document.getElementById('kbFilePreview').style.display = 'none';
-    document.getElementById('kbDropZone').style.display = 'block';
-    document.getElementById('kbFileInput').value = '';
+    const fp = document.getElementById('kbFilePreview');
+    const dz = document.getElementById('kbDropZone');
+    const fi = document.getElementById('kbFileInput');
+    if (fp) fp.style.display = 'none';
+    if (dz) dz.style.display = 'block';
+    if (fi) fi.value = '';
 };
 
-// ── SUB-SECTIONS ──
+// ── Sub-sections ──
 window.addKBSubSection = function() {
     _kbSubCount++;
     const id = 'sub_' + _kbSubCount;
+    const n  = _kbSubCount;
     const container = document.getElementById('kbSubSections');
     const div = document.createElement('div');
     div.id = id;
     div.style.cssText = 'background:#050505;border:1px solid #1a1a1a;border-radius:6px;padding:12px;position:relative;';
     div.innerHTML = `
-        <button onclick="document.getElementById('${id}').remove()"
+        <button onclick="removeSubSection('${id}', ${n})"
             style="position:absolute;top:8px;right:8px;background:var(--danger);color:#fff;border:none;padding:2px 8px;border-radius:3px;font-size:0.6rem;cursor:pointer;">✕</button>
-
-        <div style="font-size:0.6rem;color:#c5a059;letter-spacing:1px;margin-bottom:8px;font-weight:bold;">SUB-SECTION ${_kbSubCount}</div>
-
+        <div style="font-size:0.6rem;color:#c5a059;letter-spacing:1px;margin-bottom:8px;font-weight:bold;">SUB-SECTION ${n}</div>
         <div style="font-size:0.58rem;color:#555;margin-bottom:4px;">SUB-TITLE</div>
         <input type="text" placeholder="Sub-section title..."
             style="width:100%;background:#111;color:#fff;border:1px solid #222;padding:7px;border-radius:4px;font-size:0.72rem;margin-bottom:8px;"
-            data-sub-title="${_kbSubCount}">
-
+            data-sub-title="${n}">
         <div style="display:flex;gap:6px;margin-bottom:8px;">
-            <button onclick="switchSubTab(${_kbSubCount},'file')"
-                id="subTabFile_${_kbSubCount}"
+            <button onclick="switchSubTab(${n},'file')" id="subTabFile_${n}"
                 style="padding:4px 10px;border-radius:3px;font-size:0.62rem;font-weight:bold;cursor:pointer;border:1px solid var(--gold);background:#1a1200;color:var(--gold);">
                 📁 FILE
             </button>
-            <button onclick="switchSubTab(${_kbSubCount},'text')"
-                id="subTabText_${_kbSubCount}"
+            <button onclick="switchSubTab(${n},'text')" id="subTabText_${n}"
                 style="padding:4px 10px;border-radius:3px;font-size:0.62rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;">
                 ✏ TEXT
             </button>
         </div>
-
-        <div id="subFile_${_kbSubCount}">
-            <div onclick="document.getElementById('subFileInput_${_kbSubCount}').click()"
+        <div id="subFile_${n}">
+            <div onclick="document.getElementById('subFileInput_${n}').click()"
                 style="border:1px dashed #333;border-radius:4px;padding:14px;text-align:center;cursor:pointer;font-size:0.68rem;color:#555;">
                 📁 Click to upload file
             </div>
-            <input type="file" id="subFileInput_${_kbSubCount}" style="display:none" accept="*/*"
-                onchange="handleSubFile(${_kbSubCount}, this.files[0])">
-            <div id="subFilePreview_${_kbSubCount}" style="display:none;margin-top:6px;background:#111;border:1px solid #222;border-radius:4px;padding:8px;font-size:0.68rem;color:#888;"></div>
+            <input type="file" id="subFileInput_${n}" style="display:none" accept="*/*"
+                onchange="handleSubFile(${n}, this.files[0])">
+            <div id="subFilePreview_${n}" style="display:none;margin-top:6px;background:#111;border:1px solid #222;border-radius:4px;padding:8px;font-size:0.68rem;color:#888;"></div>
         </div>
-
-        <div id="subText_${_kbSubCount}" style="display:none;">
+        <div id="subText_${n}" style="display:none;">
             <textarea placeholder="Sub-section content..."
                 style="width:100%;background:#111;color:#ccc;border:1px solid #222;padding:8px;border-radius:4px;font-size:0.7rem;resize:vertical;min-height:80px;line-height:1.5;"
-                data-sub-text="${_kbSubCount}"></textarea>
+                data-sub-text="${n}"></textarea>
         </div>`;
     container.appendChild(div);
 };
 
+window.removeSubSection = function(divId, n) {
+    const el = document.getElementById(divId);
+    if (el) el.remove();
+    _kbSubFiles.delete(String(n));
+};
+
 window.switchSubTab = function(n, tab) {
-    document.getElementById('subFile_' + n).style.display = tab === 'file' ? 'block' : 'none';
-    document.getElementById('subText_' + n).style.display = tab === 'text' ? 'block' : 'none';
-    document.getElementById('subTabFile_' + n).style.cssText += tab === 'file'
-        ? ';border-color:var(--gold);background:#1a1200;color:var(--gold);'
-        : ';border-color:#333;background:#111;color:#666;';
-    document.getElementById('subTabText_' + n).style.cssText += tab === 'text'
-        ? ';border-color:var(--gold);background:#1a1200;color:var(--gold);'
-        : ';border-color:#333;background:#111;color:#666;';
+    const sf = document.getElementById('subFile_' + n);
+    const st = document.getElementById('subText_' + n);
+    const bf = document.getElementById('subTabFile_' + n);
+    const bt = document.getElementById('subTabText_' + n);
+    if (!sf || !st) return;
+    sf.style.display = tab === 'file' ? 'block' : 'none';
+    st.style.display = tab === 'text' ? 'block' : 'none';
+    if (bf) bf.style.cssText += tab==='file' ? ';border-color:var(--gold);background:#1a1200;color:var(--gold);' : ';border-color:#333;background:#111;color:#666;';
+    if (bt) bt.style.cssText += tab==='text' ? ';border-color:var(--gold);background:#1a1200;color:var(--gold);' : ';border-color:#333;background:#111;color:#666;';
 };
 
 window.handleSubFile = function(n, file) {
     if (!file) return;
     const ext = file.name.split('.').pop().toLowerCase();
-    // Store raw File in Map (DOM dataset can't hold File objects)
-    _kbSubFiles.set(String(n), file);
+    _kbSubFiles.set(String(n), file);  // Store raw File in Map
     const prev = document.getElementById('subFilePreview_' + n);
+    if (!prev) return;
     prev.style.display = 'block';
     prev.innerHTML = `${getFileIcon(ext)} <b>${file.name}</b> · ${(file.size/1024/1024).toFixed(2)}MB
-        <span style="font-size:0.58rem;color:#00c805;margin-left:6px;">✓ Ready to upload</span>`;
+        <span style="font-size:0.55rem;color:#00c805;margin-left:6px;">✓ Ready</span>`;
     prev.dataset.name = file.name;
     prev.dataset.type = file.type;
     prev.dataset.ext  = ext;
-    prev.dataset.hasFile = 'true';
 };
 
-// ── RENDER LIST ──
+// ═══════════════════════════════
+// UPLOAD TO FIREBASE STORAGE
+// with real-time progress bar
+// ═══════════════════════════════
+function setProgressBar(pct, label, transferred, total) {
+    const bar     = document.getElementById('kbUploadBar');
+    const fill    = document.getElementById('kbUploadBarFill');
+    const pctEl   = document.getElementById('kbUploadBarPct');
+    const bytesEl = document.getElementById('kbUploadBytes');
+    const btn     = document.querySelector('button[onclick="saveKBEntry()"]');
+
+    if (bar)   bar.style.display = 'block';
+    if (fill)  fill.style.width  = Math.min(pct, 100) + '%';
+    if (pctEl) pctEl.textContent = `⏳ ${label} — ${Math.round(pct)}%`;
+    if (bytesEl && transferred !== undefined) {
+        bytesEl.textContent = `${(transferred/1024/1024).toFixed(2)} MB / ${(total/1024/1024).toFixed(2)} MB`;
+    }
+    if (btn) {
+        btn.textContent = `⏳ ${Math.round(pct)}%`;
+        btn.disabled    = true;
+        btn.style.background = '#1a1200';
+        btn.style.color      = '#c5a059';
+        btn.style.border     = '1px solid #c5a059';
+    }
+}
+
+function clearProgressBar() {
+    const bar = document.getElementById('kbUploadBar');
+    if (bar) bar.style.display = 'none';
+}
+
+function resetSaveBtn(text, isErr) {
+    clearProgressBar();
+    const btn = document.querySelector('button[onclick="saveKBEntry()"]');
+    if (!btn) return;
+    btn.textContent = text;
+    btn.disabled    = false;
+    btn.style.border = '';
+    btn.style.background = isErr ? 'var(--danger)' : 'var(--gold)';
+    btn.style.color      = isErr ? '#fff' : '#000';
+}
+
+async function uploadOneFile(file, storagePath) {
+    return new Promise((resolve, reject) => {
+        const storageRef = sRef(storage, storagePath);
+        const task = uploadBytesResumable(storageRef, file);
+        task.on('state_changed',
+            (snap) => {
+                const pct = (snap.bytesTransferred / snap.totalBytes) * 100;
+                setProgressBar(pct, `Uploading ${file.name}`, snap.bytesTransferred, snap.totalBytes);
+            },
+            (err) => reject(new Error('Upload failed: ' + err.message)),
+            async () => {
+                try {
+                    const url = await getDownloadURL(task.snapshot.ref);
+                    resolve(url);
+                } catch(e) { reject(e); }
+            }
+        );
+    });
+}
+
+// ═══════════════════════════════
+// SAVE ENTRY
+// ═══════════════════════════════
+window.saveKBEntry = async function() {
+    const title = (document.getElementById('kbEntryTitle')?.value || '').trim();
+    if (!title) { alert('Title required!'); return; }
+
+    const btn = document.querySelector('button[onclick="saveKBEntry()"]');
+    if (btn) { btn.textContent = '⏳ Preparing...'; btn.disabled = true; btn.style.background='#1a1200'; btn.style.color='#c5a059'; }
+
+    try {
+        const entryId = _kbEditKey || ('kb_' + Date.now().toString(36));
+
+        // ── 1. Upload main file ──
+        let fileData = null;
+        if (_kbActiveTab === 'upload' && _kbFileData?.file instanceof File) {
+            const safeName    = _kbFileData.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const storagePath = `knowledge/${entryId}/main_${safeName}`;
+            const url = await uploadOneFile(_kbFileData.file, storagePath);
+            fileData = {
+                url,
+                name:  _kbFileData.name,
+                type:  _kbFileData.type  || '',
+                ext:   _kbFileData.ext   || '',
+                size:  _kbFileData.size  || 0,
+                path:  storagePath
+            };
+        } else if (_kbFileData?.url) {
+            fileData = _kbFileData; // existing — keep
+        }
+
+        // ── 2. Upload sub-section files ──
+        const subs = {};
+        const subTitleEls = document.querySelectorAll('[data-sub-title]');
+        let si = 0;
+        for (const el of subTitleEls) {
+            si++;
+            const n   = el.dataset.subTitle;
+            const txt = (document.querySelector(`[data-sub-text="${n}"]`)?.value || '').trim();
+            const fp  = document.getElementById('subFilePreview_' + n);
+            let subFile = null;
+
+            const rawFile = _kbSubFiles.get(String(n));
+            if (rawFile instanceof File) {
+                const safeSub = rawFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const subPath = `knowledge/${entryId}/sub${n}_${safeSub}`;
+                const subUrl  = await uploadOneFile(rawFile, subPath);
+                subFile = {
+                    url:  subUrl,
+                    name: fp?.dataset?.name || rawFile.name,
+                    type: fp?.dataset?.type || rawFile.type,
+                    ext:  fp?.dataset?.ext  || rawFile.name.split('.').pop().toLowerCase(),
+                    path: subPath
+                };
+            } else if (fp?.dataset?.url) {
+                subFile = { url: fp.dataset.url, name: fp.dataset.name, type: fp.dataset.type, ext: fp.dataset.ext };
+            }
+
+            if (el.value.trim() || txt || subFile) {
+                subs['sub' + n] = { title: el.value.trim(), text: txt, file: subFile };
+            }
+        }
+
+        // ── 3. Build entry object ──
+        const entry = {
+            title,
+            type:        document.getElementById('kbEntryType')?.value   || 'SOP',
+            desc:        (document.getElementById('kbEntryDesc')?.value   || '').trim(),
+            tags:        (document.getElementById('kbEntryTags')?.value   || '').trim(),
+            linkedTo:    document.getElementById('kbEntryLink')?.value    || '',
+            content:     _kbActiveTab === 'text'
+                            ? (document.getElementById('kbEntryContent')?.value || '').trim()
+                            : '',
+            file:        fileData,
+            subSections: Object.keys(subs).length ? subs : null,
+            updatedAt:   new Date().toISOString()
+        };
+
+        // ── 4. Save to Realtime DB ──
+        if (btn) { btn.textContent = '⏳ Saving...'; }
+        clearProgressBar();
+
+        if (_kbEditKey) {
+            await update(ref(db, `isi_v6/knowledge/entries/${_kbEditKey}`), entry);
+        } else {
+            entry.createdAt = new Date().toISOString();
+            await _fbPush(ref(db, 'isi_v6/knowledge/entries'), entry);
+        }
+
+        resetSaveBtn('✅ Saved!', false);
+        setTimeout(() => closeKBModal(), 700);
+
+    } catch(err) {
+        console.error('saveKBEntry:', err);
+        resetSaveBtn('❌ ' + err.message.slice(0, 35), true);
+        setTimeout(() => resetSaveBtn('💾 SAVE TO FIREBASE', false), 3500);
+    }
+};
+
+// ── Render list ──
 function renderKBList() {
     const container = document.getElementById('kbSettingsList');
     if (!container) return;
@@ -734,42 +899,39 @@ function renderKBList() {
         return;
     }
 
-    const typeCols = {SOP:'#4a9eff',Checklist:'#00c805',Notes:'var(--gold)',Training:'#cc44ff',Structure:'#ff5252'};
+    const typeCols  = {SOP:'#4a9eff',Checklist:'#00c805',Notes:'var(--gold)',Training:'#cc44ff',Structure:'#ff5252'};
     const typeIcons = {SOP:'📘',Checklist:'✅',Notes:'📝',Training:'🎓',Structure:'📊'};
 
     container.innerHTML = entries.map(([key,e]) => {
-        const col  = typeCols[e.type] || '#888';
-        const ico  = typeIcons[e.type] || '📁';
+        const col      = typeCols[e.type]  || '#888';
+        const ico      = typeIcons[e.type] || '📁';
         const children = Object.entries(_kbEntries).filter(([,en]) => en.linkedTo === key);
-        const hasFile = !!(e.file?.base64);
-        const hasSubs = e.subSections && Object.keys(e.subSections).length > 0;
+        const hasFile  = !!(e.file?.url);
+        const hasSubs  = e.subSections && Object.keys(e.subSections).length > 0;
+
         return `
         <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-left:4px solid ${col};border-radius:6px;margin-bottom:8px;overflow:hidden;">
-            <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;"
-                onclick="toggleKBCard('kbc_${key}')">
-                <span style="font-size:0.9rem;">${ico}</span>
-                <span style="font-size:0.58rem;border:1px solid ${col};color:${col};padding:1px 5px;border-radius:3px;font-weight:bold;text-transform:uppercase;flex-shrink:0;">${e.type}</span>
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;" onclick="toggleKBCard('kbc_${key}')">
+                <span>${ico}</span>
+                <span style="font-size:0.5rem;border:1px solid ${col};color:${col};padding:1px 5px;border-radius:3px;font-weight:bold;text-transform:uppercase;">${e.type}</span>
                 <span style="flex:1;font-size:0.75rem;font-weight:bold;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.title}</span>
-                ${hasFile?'<span style="font-size:0.55rem;background:#001a10;color:#00c805;border:1px solid #006600;padding:1px 5px;border-radius:3px;">📎 FILE</span>':''}
-                ${hasSubs?`<span style="font-size:0.55rem;background:#0a0800;color:var(--gold);border:1px solid #444;padding:1px 5px;border-radius:3px;">${Object.keys(e.subSections).length} SUBS</span>`:''}
-                <span style="font-size:0.58rem;color:#333;">${e.createdAt?new Date(e.createdAt).toLocaleDateString('en-GB'):''}</span>
+                ${hasFile  ? '<span style="font-size:0.5rem;background:#001a10;color:#00c805;border:1px solid #003a1a;padding:1px 5px;border-radius:3px;">📎 FILE</span>' : ''}
+                ${hasSubs  ? `<span style="font-size:0.5rem;background:#0a0800;color:var(--gold);border:1px solid #2a1a00;padding:1px 5px;border-radius:3px;">${Object.keys(e.subSections).length} SUBS</span>` : ''}
+                <span style="font-size:0.58rem;color:#333;">${e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-GB') : ''}</span>
                 <div style="display:flex;gap:4px;flex-shrink:0;" onclick="event.stopPropagation()">
-                    <button onclick="openKBInPage('${key}')" style="background:transparent;border:1px solid #222;color:#555;padding:3px 8px;border-radius:3px;font-size:0.6rem;cursor:pointer;" onmouseover="this.style.color='#4a9eff';this.style.borderColor='#4a9eff'" onmouseout="this.style.color='#555';this.style.borderColor='#222'">VIEW</button>
-                    <button onclick="openKBEditEntry('${key}')" style="background:transparent;border:1px solid #222;color:#555;padding:3px 8px;border-radius:3px;font-size:0.6rem;cursor:pointer;" onmouseover="this.style.color='var(--gold)';this.style.borderColor='var(--gold)'" onmouseout="this.style.color='#555';this.style.borderColor='#222'">EDIT</button>
-                    <button onclick="deleteKBEntry('${key}')" style="background:transparent;border:1px solid #222;color:#555;padding:3px 8px;border-radius:3px;font-size:0.6rem;cursor:pointer;" onmouseover="this.style.color='var(--danger)';this.style.borderColor='var(--danger)'" onmouseout="this.style.color='#555';this.style.borderColor='#222'">🗑</button>
+                    <button onclick="openKBInPage('${key}')" style="background:transparent;border:1px solid #222;color:#555;padding:3px 8px;border-radius:3px;font-size:0.6rem;cursor:pointer;" onmouseover="this.style.borderColor='#4a9eff';this.style.color='#4a9eff'" onmouseout="this.style.borderColor='#222';this.style.color='#555'">VIEW</button>
+                    <button onclick="openKBEditEntry('${key}')" style="background:transparent;border:1px solid #222;color:#555;padding:3px 8px;border-radius:3px;font-size:0.6rem;cursor:pointer;" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='#222';this.style.color='#555'">EDIT</button>
+                    <button onclick="deleteKBEntry('${key}')" style="background:transparent;border:1px solid #222;color:#555;padding:3px 8px;border-radius:3px;font-size:0.6rem;cursor:pointer;" onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'" onmouseout="this.style.borderColor='#222';this.style.color='#555'">🗑</button>
                 </div>
             </div>
-            <div id="kbc_${key}" style="display:none;padding:10px 12px;border-top:1px solid #111;background:#050505;">
-                ${e.desc?`<div style="font-size:0.68rem;color:#666;margin-bottom:8px;">${e.desc}</div>`:''}
-                ${e.content?`<div style="font-size:0.68rem;color:#555;line-height:1.5;max-height:50px;overflow:hidden;">${e.content.slice(0,180)}...</div>`:''}
-                ${children.length?`
-                <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0d0d0d;">
-                    <div style="font-size:0.55rem;color:#444;letter-spacing:1px;margin-bottom:5px;">🔗 LINKED</div>
-                    ${children.map(([ck,ce])=>`
-                    <div onclick="openKBInPage('${ck}')" style="display:inline-flex;align-items:center;gap:5px;background:#0a0a0a;border:1px solid #222;padding:3px 8px;border-radius:4px;font-size:0.62rem;color:#666;cursor:pointer;margin:2px;">
-                        ${typeIcons[ce.type]||'📁'} ${ce.title}
-                    </div>`).join('')}
-                </div>`:''}
+            <div id="kbc_${key}" style="display:none;padding:10px 12px;border-top:1px solid #0d0d0d;background:#050505;font-size:0.68rem;color:#555;line-height:1.6;">
+                ${e.desc ? `<div style="margin-bottom:6px;color:#666;">${e.desc}</div>` : ''}
+                ${e.content ? `<div style="max-height:50px;overflow:hidden;">${e.content.slice(0,160)}...</div>` : ''}
+                ${children.length ? `
+                <div style="margin-top:8px;padding-top:6px;border-top:1px solid #0a0a0a;">
+                    <div style="font-size:0.53rem;color:#333;letter-spacing:1px;margin-bottom:4px;">🔗 LINKED</div>
+                    ${children.map(([ck,ce]) => `<span onclick="openKBInPage('${ck}')" style="display:inline-flex;align-items:center;gap:4px;background:#0a0a0a;border:1px solid #1a1a1a;padding:2px 7px;border-radius:3px;font-size:0.6rem;color:#555;cursor:pointer;margin:2px;">${typeIcons[ce.type]||'📁'} ${ce.title}</span>`).join('')}
+                </div>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -786,10 +948,10 @@ window.openKBInPage = function(key) {
 
 function updateKBStats() {
     const all = Object.values(_kbEntries);
-    const st = document.getElementById('kbSettingsStats');
-    if (!st) return;
-    const c = t => all.filter(e=>e.type===t).length;
-    st.textContent = `Total: ${all.length}  ·  SOP: ${c('SOP')}  ·  Checklist: ${c('Checklist')}  ·  Notes: ${c('Notes')}  ·  Training: ${c('Training')}`;
+    const el  = document.getElementById('kbSettingsStats');
+    if (!el) return;
+    const c   = t => all.filter(e => e.type === t).length;
+    el.textContent = `Total: ${all.length}  ·  SOP: ${c('SOP')}  ·  Checklist: ${c('Checklist')}  ·  Notes: ${c('Notes')}  ·  Training: ${c('Training')}`;
 }
 
 function buildKBLinkDropdown() {
@@ -807,32 +969,37 @@ function buildKBLinkDropdown() {
     if (cur) sel.value = cur;
 }
 
-// ── OPEN MODAL ──
+// ── Open add modal ──
 window.openKBAddEntry = function() {
     _kbEditKey = null;
     _kbFileData = null;
     _kbSubCount = 0;
     _kbSubFiles.clear();
+
     document.getElementById('kbModalHeading').textContent = 'ADD NEW ENTRY';
     ['kbEntryTitle','kbEntryDesc','kbEntryContent','kbEntryTags'].forEach(id => {
-        const el = document.getElementById(id); if(el) el.value='';
+        const el = document.getElementById(id); if (el) el.value = '';
     });
-    document.getElementById('kbEntryType').value = _kbActiveCat !== 'ALL' ? _kbActiveCat : 'SOP';
+    document.getElementById('kbEntryType').value = (_kbActiveCat !== 'ALL') ? _kbActiveCat : 'SOP';
     document.getElementById('kbSubSections').innerHTML = '';
     clearKBFile();
     buildKBLinkDropdown();
     switchKBTab('upload');
-    setSaveStatus('💾 SAVE TO FIREBASE', false);
-    const m = document.getElementById('kbAddModal');
-    m.style.display = 'flex';
-    setTimeout(() => document.getElementById('kbEntryTitle').focus(), 100);
+    resetSaveBtn('💾 SAVE TO FIREBASE', false);
+    clearProgressBar();
+
+    document.getElementById('kbAddModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('kbEntryTitle')?.focus(), 100);
 };
 
+// ── Open edit modal ──
 window.openKBEditEntry = function(key) {
-    const e = _kbEntries[key]; if(!e) return;
+    const e = _kbEntries[key]; if (!e) return;
     _kbEditKey = key;
-    _kbFileData = e.file || null;
+    _kbFileData = null;
     _kbSubCount = 0;
+    _kbSubFiles.clear();
+
     document.getElementById('kbModalHeading').textContent = 'EDIT ENTRY';
     document.getElementById('kbEntryTitle').value   = e.title   || '';
     document.getElementById('kbEntryDesc').value    = e.desc    || '';
@@ -840,171 +1007,56 @@ window.openKBEditEntry = function(key) {
     document.getElementById('kbEntryTags').value    = e.tags    || '';
     document.getElementById('kbEntryType').value    = e.type    || 'SOP';
     document.getElementById('kbSubSections').innerHTML = '';
+
     buildKBLinkDropdown();
     document.getElementById('kbEntryLink').value = e.linkedTo || '';
 
     if (e.file?.url) {
+        _kbFileData = e.file; // existing url — no raw File
         switchKBTab('upload');
-        _kbFileData = e.file; // has .url not .file
         document.getElementById('kbFilePreview').style.display = 'block';
-        document.getElementById('kbDropZone').style.display = 'none';
-        document.getElementById('kbFileIcon').textContent = getFileIcon(e.file.ext||'');
+        document.getElementById('kbDropZone').style.display    = 'none';
+        document.getElementById('kbFileIcon').textContent = getFileIcon(e.file.ext || '');
         document.getElementById('kbFileName').textContent = e.file.name || 'File';
-        document.getElementById('kbFileSize').textContent = ((e.file.size||0)/1024/1024).toFixed(2) + ' MB';
+        document.getElementById('kbFileSize').textContent = ((e.file.size || 0) / 1024 / 1024).toFixed(2) + ' MB';
     } else if (e.content) {
         switchKBTab('text');
+    } else {
+        switchKBTab('upload');
     }
+
+    resetSaveBtn('💾 SAVE TO FIREBASE', false);
+    clearProgressBar();
     document.getElementById('kbAddModal').style.display = 'flex';
 };
 
+// ── Close modal ──
 window.closeKBModal = function() {
     document.getElementById('kbAddModal').style.display = 'none';
-    _kbEditKey = null;
+    _kbEditKey  = null;
     _kbFileData = null;
     _kbSubFiles.clear();
     _kbSubCount = 0;
-    // Reset button state
-    const btn = document.querySelector('button[onclick="saveKBEntry()"]');
-    if (btn) { btn.textContent = '💾 SAVE TO FIREBASE'; btn.disabled = false; }
+    clearProgressBar();
+    resetSaveBtn('💾 SAVE TO FIREBASE', false);
 };
 
-// ── UPLOAD FILE TO FIREBASE STORAGE ──
-async function uploadFileToStorage(file, storagePath) {
-    try {
-        const storageRef = sRef(storage, storagePath);
-        const snap = await uploadBytes(storageRef, file);
-        const url  = await getDownloadURL(snap.ref);
-        return url;
-    } catch (err) {
-        console.error('Storage upload error:', err);
-        throw new Error('File upload failed: ' + err.message);
-    }
-}
-
-// ── SHOW SAVE STATUS ──
-function setSaveStatus(msg, isError) {
-    const btn = document.querySelector('button[onclick="saveKBEntry()"]');
-    if (!btn) return;
-    btn.textContent = msg;
-    btn.disabled = !isError;
-    btn.style.background = isError ? 'var(--danger)' : (msg.includes('⏳') ? '#5a4000' : 'var(--gold)');
-    btn.style.color = isError ? '#fff' : (msg.includes('⏳') ? '#c5a059' : '#000');
-}
-
-// ── SAVE ENTRY ──
-window.saveKBEntry = async function() {
-    const title = document.getElementById('kbEntryTitle').value.trim();
-    if (!title) { alert('Title required!'); return; }
-
-    setSaveStatus('⏳ Preparing...', false);
-
-    try {
-        const entryId = _kbEditKey || ('kb_' + Date.now().toString(36));
-
-        // ── Upload MAIN file ──
-        let fileData = null;
-        if (_kbActiveTab === 'upload' && _kbFileData?.file) {
-            const safeName = _kbFileData.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const storagePath = `knowledge/${entryId}/main_${safeName}`;
-            setSaveStatus(`⏳ Uploading "${_kbFileData.name}"...`, false);
-            const url = await uploadFileToStorage(_kbFileData.file, storagePath);
-            fileData = {
-                url,
-                name:  _kbFileData.name,
-                type:  _kbFileData.type || '',
-                ext:   _kbFileData.ext  || '',
-                size:  _kbFileData.size || 0,
-                path:  storagePath
-            };
-        } else if (_kbFileData?.url) {
-            fileData = _kbFileData; // existing file, keep as-is
-        }
-
-        // ── Upload SUB-SECTION files ──
-        const subs = {};
-        const subTitleEls = document.querySelectorAll('[data-sub-title]');
-        let subIdx = 0;
-        for (const el of subTitleEls) {
-            subIdx++;
-            const n   = el.dataset.subTitle;
-            const txt = (document.querySelector(`[data-sub-text="${n}"]`)?.value || '').trim();
-            const fp  = document.getElementById('subFilePreview_' + n);
-            let subFile = null;
-
-            const rawFile = _kbSubFiles.get(String(n));
-            if (rawFile) {
-                const safeSub = rawFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                const subPath = `knowledge/${entryId}/sub${n}_${safeSub}`;
-                setSaveStatus(`⏳ Uploading sub-file ${subIdx}/${subTitleEls.length}...`, false);
-                const subUrl = await uploadFileToStorage(rawFile, subPath);
-                subFile = {
-                    url:  subUrl,
-                    name: fp?.dataset?.name || rawFile.name,
-                    type: fp?.dataset?.type || rawFile.type,
-                    ext:  fp?.dataset?.ext  || rawFile.name.split('.').pop().toLowerCase(),
-                    path: subPath
-                };
-            } else if (fp?.dataset?.url) {
-                // existing sub file
-                subFile = { url: fp.dataset.url, name: fp.dataset.name, type: fp.dataset.type, ext: fp.dataset.ext };
-            }
-
-            if (el.value.trim() || txt || subFile) {
-                subs['sub' + n] = { title: el.value.trim(), text: txt, file: subFile };
-            }
-        }
-
-        const entry = {
-            title,
-            type:        document.getElementById('kbEntryType').value,
-            desc:        document.getElementById('kbEntryDesc').value.trim(),
-            tags:        document.getElementById('kbEntryTags').value.trim(),
-            linkedTo:    document.getElementById('kbEntryLink').value || '',
-            content:     _kbActiveTab === 'text'
-                            ? (document.getElementById('kbEntryContent').value.trim())
-                            : '',
-            file:        fileData,
-            subSections: Object.keys(subs).length ? subs : null,
-            updatedAt:   new Date().toISOString()
-        };
-
-        setSaveStatus('⏳ Saving to database...', false);
-
-        if (_kbEditKey) {
-            await update(ref(db, `isi_v6/knowledge/entries/${_kbEditKey}`), entry);
-        } else {
-            entry.createdAt = new Date().toISOString();
-            await _fbPush(ref(db, 'isi_v6/knowledge/entries'), entry);
-        }
-
-        setSaveStatus('✅ Saved!', false);
-        setTimeout(() => closeKBModal(), 600);
-
-    } catch(err) {
-        console.error('saveKBEntry error:', err);
-        setSaveStatus('❌ ' + (err.message.slice(0, 40)), true);
-        setTimeout(() => setSaveStatus('💾 SAVE TO FIREBASE', false), 3000);
-    }
-};
-
-// ── DELETE WITH MATH CAPTCHA ──
+// ── Delete with math captcha ──
 window.deleteKBEntry = function(key) {
-    const e = _kbEntries[key]; if(!e) return;
+    const e = _kbEntries[key]; if (!e) return;
     const ops = ['+','-','×'];
-    const op  = ops[Math.floor(Math.random()*3)];
-    let a = Math.floor(Math.random()*10)+1;
-    let b = Math.floor(Math.random()*10)+1;
-    if (op==='-' && b>a) [a,b]=[b,a];
-    const ans = op==='+'?a+b:op==='-'?a-b:a*b;
-    const userAns = prompt(`⚠ DELETE "${e.title}"?
-
-Confirm karo: ${a} ${op} ${b} = ?`);
+    const op  = ops[Math.floor(Math.random() * 3)];
+    let a = Math.floor(Math.random() * 10) + 1;
+    let b = Math.floor(Math.random() * 10) + 1;
+    if (op === '-' && b > a) [a, b] = [b, a];
+    const ans = op === '+' ? a+b : op === '-' ? a-b : a*b;
+    const userAns = prompt(`⚠ DELETE "${e.title}"?\n\nSolve to confirm: ${a} ${op} ${b} = ?`);
     if (userAns === null) return;
-    if (parseInt(userAns) !== ans) { alert('❌ Galat answer! Delete cancel.'); return; }
-    _rem(_ref(_kbDB, `isi_v6/knowledge/entries/${key}`));
+    if (parseInt(userAns) !== ans) { alert('❌ Wrong answer! Delete cancelled.'); return; }
+    remove(ref(db, `isi_v6/knowledge/entries/${key}`));
 };
 
-// ── INIT ──
+// ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
     buildAIDropdown();
 });
