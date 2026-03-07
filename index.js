@@ -94,6 +94,32 @@ function formatCountdown(diffSeconds) {
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
+// ──────────────────────────────────────────────
+// HELPER — get all active time slots for a node today
+// Supports new timeSlots format AND old times format
+// Returns: [ { start, end, expire, risk, qtyFrom, qtyTo, slotIdx } ]
+// ──────────────────────────────────────────────
+function getNodeSlotsForDay(node, dayName) {
+    if (node.timeSlots && node.timeSlots[dayName] && Array.isArray(node.timeSlots[dayName])) {
+        return node.timeSlots[dayName]
+            .filter(sl => sl && sl.start)
+            .map((sl, i) => ({ ...sl, slotIdx: i }));
+    }
+    if (node.times && node.times[dayName] && node.times[dayName].start) {
+        const t = node.times[dayName];
+        return [{
+            start:   t.start,
+            end:     t.end    || '',
+            expire:  t.expire || '',
+            risk:    node.risk    || 0.35,
+            qtyFrom: node.qtyFrom || 1,
+            qtyTo:   node.qtyTo   || 10,
+            slotIdx: 0
+        }];
+    }
+    return [];
+}
+
 function updateClock() {
     const now     = new Date();
     const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][now.getDay()];
@@ -204,29 +230,6 @@ onValue(ref(db, 'isi_v6/stats'), (snap) => {
 // Supports new timeSlots format AND old times format
 // Returns: [ { start, end, expire, risk, qtyFrom, qtyTo, slotIdx } ]
 // ──────────────────────────────────────────────
-function getNodeSlotsForDay(node, dayName) {
-    // New format: node.timeSlots[day] = array
-    if (node.timeSlots && node.timeSlots[dayName] && Array.isArray(node.timeSlots[dayName])) {
-        return node.timeSlots[dayName]
-            .filter(sl => sl && sl.start)
-            .map((sl, i) => ({ ...sl, slotIdx: i }));
-    }
-    // Old format: node.times[day] = { start, end, expire }
-    if (node.times && node.times[dayName] && node.times[dayName].start) {
-        const t = node.times[dayName];
-        return [{
-            start:   t.start,
-            end:     t.end    || '',
-            expire:  t.expire || '',
-            risk:    node.risk    || 0.35,
-            qtyFrom: node.qtyFrom || 1,
-            qtyTo:   node.qtyTo   || 10,
-            slotIdx: 0
-        }];
-    }
-    return [];
-}
-
 // ──────────────────────────────────────────────
 function renderTimerSlider() {
     const grid    = document.getElementById('timerSlider');
