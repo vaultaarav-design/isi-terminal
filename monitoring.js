@@ -493,7 +493,7 @@ window.viewDeepDive = function (nodeIdxStr, fbKey) {
         : '<span style="color:#444;font-size:0.7rem;">None recorded</span>';
 
     // Pre-entry record for same date + node
-    const peRecords = preentryData?.[selectedClusterId]?.[t._nodeIdx];
+    const peRecords = preentryData?.[t.clusterId]?.[t.nodeIdx];
     const todayPE   = peRecords
         ? Object.values(peRecords).filter(r => r.date === t.date).sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''))
         : [];

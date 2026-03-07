@@ -103,8 +103,13 @@ function updateClock() {
     document.querySelectorAll('.s-timer-card').forEach(card => {
         const n = clusters[card.dataset.cluster]?.nodes[card.dataset.node];
         if (!n) return;
-        const tt    = n.times?.[dayName] || {};
+        const slotIdx = parseInt(card.dataset.slot || '0');
         const isSel = card.classList.contains('node-selected');
+
+        // Get slot-specific times
+        const slots = getNodeSlotsForDay(n, dayName);
+        const slot  = slots[slotIdx] || slots[0] || {};
+        const tt    = { start: slot.start, end: slot.end, expire: slot.expire };
 
         const startMin  = timeToMinutes(tt.start);
         const endMin    = timeToMinutes(tt.end);
@@ -194,7 +199,33 @@ onValue(ref(db, 'isi_v6/stats'), (snap) => {
 });
 
 // ──────────────────────────────────────────────
-// TIMER SLIDER — only today's nodes
+// HELPER — get all active time slots for a node today
+// Supports new timeSlots format AND old times format
+// Returns: [ { start, end, expire, risk, qtyFrom, qtyTo, slotIdx } ]
+// ──────────────────────────────────────────────
+function getNodeSlotsForDay(node, dayName) {
+    // New format: node.timeSlots[day] = array
+    if (node.timeSlots && node.timeSlots[dayName] && Array.isArray(node.timeSlots[dayName])) {
+        return node.timeSlots[dayName]
+            .filter(sl => sl && sl.start)
+            .map((sl, i) => ({ ...sl, slotIdx: i }));
+    }
+    // Old format: node.times[day] = { start, end, expire }
+    if (node.times && node.times[dayName] && node.times[dayName].start) {
+        const t = node.times[dayName];
+        return [{
+            start:   t.start,
+            end:     t.end    || '',
+            expire:  t.expire || '',
+            risk:    node.risk    || 0.35,
+            qtyFrom: node.qtyFrom || 1,
+            qtyTo:   node.qtyTo   || 10,
+            slotIdx: 0
+        }];
+    }
+    return [];
+}
+
 // ──────────────────────────────────────────────
 function renderTimerSlider() {
     const grid    = document.getElementById('timerSlider');
@@ -211,11 +242,10 @@ function renderTimerSlider() {
     let todayCards = [];
     entries.forEach(([cId, cluster]) => {
         cluster.nodes.forEach((node, nIdx) => {
-            const times = node.times?.[dayName] || {};
-            // Only include nodes that have a start time set for today
-            if (times.start) {
-                todayCards.push({ cId, cluster, node, nIdx, times });
-            }
+            const slots = getNodeSlotsForDay(node, dayName);
+            slots.forEach(slot => {
+                todayCards.push({ cId, cluster, node, nIdx, times: slot, slotIdx: slot.slotIdx });
+            });
         });
     });
 
@@ -225,17 +255,21 @@ function renderTimerSlider() {
         return;
     }
 
-    todayCards.forEach(({ cId, cluster, node, nIdx, times }) => {
+    todayCards.forEach(({ cId, cluster, node, nIdx, times, slotIdx }) => {
         const s       = getNodeStats(cId, nIdx);
         const liveBal = s.currentBal ?? node.balance ?? 0;
-        const riskAmt = (liveBal * (node.risk || 0) / 100).toFixed(0);
+        const slotRisk   = times.risk    ?? node.risk    ?? 0.35;
+        const slotQFrom  = times.qtyFrom ?? node.qtyFrom ?? 1;
+        const slotQTo    = times.qtyTo   ?? node.qtyTo   ?? 10;
+        const riskAmt = (liveBal * slotRisk / 100).toFixed(0);
+        const slotLabel = slotIdx > 0 ? ` (S${slotIdx+1})` : '';
         grid.innerHTML += `
-            <div class="s-timer-card stc-landscape" data-cluster="${cId}" data-node="${nIdx}">
+            <div class="s-timer-card stc-landscape" data-cluster="${cId}" data-node="${nIdx}" data-slot="${slotIdx}">
                 <div class="stc-left">
                     <div class="stc-cluster">${cluster.title}</div>
-                    <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}</div>
+                    <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}${slotLabel}</div>
                     <div class="stc-window">${times.start} → ${times.end || '--'} → ${times.expire || '--'}</div>
-                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${node.risk}% · Qty ${node.qtyFrom}–${node.qtyTo}</div>
+                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${slotRisk}% · Qty ${slotQFrom}–${slotQTo}</div>
                 </div>
                 <div class="stc-right">
                     <div class="stc-status-text tc-status-text">LOADING</div>
@@ -396,10 +430,15 @@ function updateSelectedInfoBar() {
 
     const s        = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal  = s.currentBal ?? n.balance ?? 0;
-    const rAmt     = (liveBal * (n.risk || 0) / 100).toFixed(2);
     const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const tt       = n.times?.[dayName] || {};
-    const timeWindow = (tt.start && tt.expire) ? `${tt.start} → ${tt.expire}` : 'Not set';
+    const slots    = getNodeSlotsForDay(n, dayName);
+    // Show first slot's risk; if multiple slots, show range
+    const rAmt     = slots.length > 0
+        ? (liveBal * (slots[0].risk ?? n.risk ?? 0) / 100).toFixed(2)
+        : (liveBal * (n.risk || 0) / 100).toFixed(2);
+    const timeWindow = slots.length > 0
+        ? slots.map(sl => `${sl.start}→${sl.expire||'--'}`).join(' | ')
+        : 'Not set';
 
     document.getElementById('sibName').textContent    = n.title || ('Account ' + (selectedNodeIdx + 1));
     document.getElementById('sibBal').textContent     = `${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -436,7 +475,11 @@ window.updateRiskCalc = function () {
     const asset   = document.getElementById('assetSelect').value;
     const s       = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal = s.currentBal ?? n.balance ?? 0;
-    const rAmt    = liveBal * (n.risk || 0) / 100;
+    // Use first slot's risk, fallback to node.risk for old format
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const slots   = getNodeSlotsForDay(n, dayName);
+    const riskPct = slots.length > 0 ? (slots[0].risk ?? n.risk ?? 0.35) : (n.risk || 0.35);
+    const rAmt    = liveBal * riskPct / 100;
     let hint      = '';
 
     if (asset === 'XAUUSD') {
