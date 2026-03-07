@@ -531,85 +531,148 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
 .stc-landscape {
     min-width: 320px !important;
     max-width: 380px !important;
-    height: 78px !important;
-    padding: 10px 14px !important;
+    height: 82px !important;
+    padding: 10px 16px !important;
     display: flex !important;
     align-items: center !important;
     gap: 16px !important;
-    border-radius: 6px !important;
+    border-radius: 10px !important;
+    border-width: 2px !important;
+    border-style: solid !important;
+    transition: border-color 0.5s ease, box-shadow 0.5s ease, background 0.5s ease !important;
 }
 .stc-left {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     overflow: hidden;
 }
 .stc-cluster {
     font-size: 0.52rem;
-    color: #555;
+    color: #666;
     letter-spacing: 1.5px;
     text-transform: uppercase;
+    font-weight: 600;
 }
 .stc-name {
-    font-size: 0.82rem;
+    font-size: 0.84rem;
     font-weight: 700;
-    color: #ddd;
+    color: #e8e8e8;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 .stc-window {
     font-size: 0.6rem;
-    color: #666;
+    color: #888;
     font-family: monospace;
+    letter-spacing: 0.5px;
 }
 .stc-risk {
     font-size: 0.57rem;
-    color: #444;
+    color: #666;
     margin-top: 1px;
 }
 .stc-right {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 1px;
+    gap: 2px;
     flex-shrink: 0;
     min-width: 110px;
 }
 .stc-countdown {
-    font-size: 1.35rem !important;
+    font-size: 1.4rem !important;
     font-family: monospace;
     font-weight: 900;
-    letter-spacing: 1px;
+    letter-spacing: 2px;
+    line-height: 1;
 }
 .tc-status-text {
-    font-size: 0.62rem !important;
+    font-size: 0.65rem !important;
     font-weight: bold;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
 }
 .stc-live-label {
-    font-size: 0.5rem;
+    font-size: 0.48rem;
     color: #555;
     letter-spacing: 2px;
     text-transform: uppercase;
 }
 
-/* RGB pulse border animation for pre-live cards */
-@keyframes rgbPulse {
-    0%   { border-color: #ff0040; box-shadow: 0 0 12px rgba(255,0,64,0.4); }
-    25%  { border-color: #ff8800; box-shadow: 0 0 12px rgba(255,136,0,0.4); }
-    50%  { border-color: #c5a059; box-shadow: 0 0 12px rgba(197,160,89,0.5); }
-    75%  { border-color: #8800ff; box-shadow: 0 0 12px rgba(136,0,255,0.4); }
-    100% { border-color: #ff0040; box-shadow: 0 0 12px rgba(255,0,64,0.4); }
+/* ── PHASE STATES — STABLE COLORS, NO ANIMATION ── */
+
+/* DEFAULT / IDLE */
+.s-timer-card {
+    border-color: #252525 !important;
+    background: #0a0a0a !important;
+    box-shadow: none !important;
 }
-.stc-rgb-pulse {
-    animation: rgbPulse 2.5s linear infinite !important;
+
+/* PRE / SCHEDULED — Deep Purple (stable) */
+.s-timer-card.stc-rgb-pulse {
+    animation: none !important;
+    border-color: #7c3aed !important;
+    box-shadow: 0 0 16px rgba(124,58,237,0.3), inset 0 0 24px rgba(124,58,237,0.05) !important;
+    background: #06010f !important;
 }
-.stc-rgb-pulse .stc-countdown {
-    color: var(--gold) !important;
+.s-timer-card.stc-rgb-pulse .stc-countdown { color: #a78bfa !important; }
+.s-timer-card.stc-rgb-pulse .tc-status-text { color: #7c3aed !important; }
+.s-timer-card.stc-rgb-pulse .stc-cluster { color: #6d28d9 !important; }
+.s-timer-card.stc-rgb-pulse .stc-name { color: #c4b5fd !important; }
+.s-timer-card.stc-rgb-pulse .stc-window { color: #7c5cc4 !important; }
+
+/* LIVE — Green */
+.s-timer-card.tc-active {
+    border-color: #00e676 !important;
+    box-shadow: 0 0 20px rgba(0,230,118,0.35), inset 0 0 28px rgba(0,230,118,0.06) !important;
+    background: #00080300 !important;
+    background: #010d04 !important;
 }
+.s-timer-card.tc-active .stc-countdown { color: #00e676 !important; }
+.s-timer-card.tc-active .tc-status-text { color: #00e676 !important; }
+.s-timer-card.tc-active .stc-cluster { color: #00a854 !important; }
+.s-timer-card.tc-active .stc-name { color: #b9f6ca !important; }
+.s-timer-card.tc-active .stc-window { color: #69f0ae !important; }
+
+/* EXIT ZONE — Gold/Yellow */
+.s-timer-card.tc-warning {
+    border-color: #ffd600 !important;
+    box-shadow: 0 0 16px rgba(255,214,0,0.3), inset 0 0 24px rgba(255,214,0,0.05) !important;
+    background: #080600 !important;
+}
+.s-timer-card.tc-warning .stc-countdown { color: #ffd600 !important; }
+.s-timer-card.tc-warning .tc-status-text { color: #ffd600 !important; }
+.s-timer-card.tc-warning .stc-cluster { color: #b8860b !important; }
+.s-timer-card.tc-warning .stc-name { color: #fff9c4 !important; }
+.s-timer-card.tc-warning .stc-window { color: #c5a059 !important; }
+
+/* EXPIRED — Red */
+.s-timer-card.tc-expired {
+    border-color: #f44336 !important;
+    box-shadow: 0 0 14px rgba(244,67,54,0.25), inset 0 0 20px rgba(244,67,54,0.04) !important;
+    background: #0d0101 !important;
+    opacity: 0.75 !important;
+}
+.s-timer-card.tc-expired .stc-countdown { color: #f44336 !important; }
+.s-timer-card.tc-expired .tc-status-text { color: #f44336 !important; }
+.s-timer-card.tc-expired .stc-cluster { color: #7f1010 !important; }
+.s-timer-card.tc-expired .stc-name { color: #ef9a9a !important; }
+.s-timer-card.tc-expired .stc-window { color: #b71c1c !important; }
+
+/* SELECTED (account selected) — Blue, override all phases */
+.s-timer-card.node-selected {
+    border-color: #4a9eff !important;
+    box-shadow: 0 0 20px rgba(74,158,255,0.35) !important;
+    background: #010810 !important;
+}
+.s-timer-card.node-selected .stc-countdown { color: #4a9eff !important; }
+.s-timer-card.node-selected .tc-status-text { color: #4a9eff !important; }
+.s-timer-card.node-selected .stc-cluster { color: #1565c0 !important; }
+.s-timer-card.node-selected .stc-name { color: #90caf9 !important; }
+.s-timer-card.node-selected .stc-window { color: #42a5f5 !important; }
     background: #3a1010; color: #ff5252; border: 1px solid #d32f2f;
     padding: 5px 10px; font-size: 0.65rem; width: auto; margin: 2px;
     border-radius: 4px; cursor: pointer;

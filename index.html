@@ -228,7 +228,7 @@
         /* ===== MISC ===== */
         .security-bar { background: #1a0000; padding: 11px; border: 1px solid var(--danger); margin-bottom: 14px; border-radius: 8px; }
         .balance-chip { background: #000; padding: 11px; border: 1px solid var(--gold); border-radius: 8px; text-align: center; }
-        #accountInfo { margin-top: 10px; padding: 10px; background: #0d0d0d; border: 1px solid var(--gold); border-radius: 5px; color: var(--gold); font-weight: bold; line-height: 1.7; font-size: 0.82rem; }
+        
         #noClusterWarn { display: none; text-align: center; padding: 24px; color: var(--warning); border: 1px dashed var(--warning); border-radius: 8px; margin-bottom: 14px; font-size: 0.85rem; }
         #noClusterWarn.vis { display: block; }
 
@@ -357,10 +357,6 @@
     <div class="sib-sep">|</div>
     <div class="sib-item"><span class="sib-label">BALANCE</span><span id="sibBal" class="sib-val">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">RISK%</span><span id="sibRisk" class="sib-val">—</span></div>
-    <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">QTY</span><span id="sibQty" class="sib-val">—</span></div>
-    <div class="sib-sep">|</div>
     <div class="sib-item"><span class="sib-label">TODAY</span><span id="sibTime" class="sib-val">—</span></div>
     <div class="sib-sep">|</div>
     <div class="sib-item"><span class="sib-label">RISK AMT</span><span id="sibRiskAmt" class="sib-val">—</span></div>
@@ -437,8 +433,13 @@
                     <option value="US30">US30</option>
                 </select>
             </div>
+            <div id="tradeSlotWrap" style="display:none;">
+                <label style="font-size:0.72rem; color:#888;">Trade Slot</label>
+                <select id="tradeSlotSelect" onchange="onTradeSlotChange()" style="border-color:var(--gold);">
+                    <option value="">— Select Slot —</option>
+                </select>
+            </div>
         </div>
-        <div id="accountInfo">Select Cluster + Account from header to calculate risk...</div>
     </div>
 
     <!-- PERMISSION MATRIX — INSTITUTIONAL BIAS ENGINE -->

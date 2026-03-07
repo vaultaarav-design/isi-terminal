@@ -23,6 +23,7 @@ const db    = getDatabase(fbApp);
 let clusters          = {};
 let selectedClusterId = null;
 let selectedNodeIdx   = null;
+let selectedSlotIdx   = 0;   // active trade slot index (for multi-slot nodes)
 let tradeHistory      = [];
 let equityPoints      = [];
 let chartInstance     = null;
@@ -153,9 +154,9 @@ function updateClock() {
         const se = card.querySelector('.tc-status-text');
         const cd = card.querySelector('.stc-countdown');
         const lb = card.querySelector('.stc-live-label');
-        if (se) { se.textContent = st; se.style.color = sc; }
-        if (cd) { cd.textContent = countdown; cd.style.color = sc; }
-        if (lb) { lb.textContent = lbl; lb.style.color = sc; }
+        if (se) { se.textContent = st; se.style.color = ''; }
+        if (cd) { cd.textContent = countdown; cd.style.color = ''; }
+        if (lb) { lb.textContent = lbl; lb.style.color = ''; }
     });
 
     updateSelectedInfoBar();
@@ -393,6 +394,7 @@ window.onAccountChange = function () {
         return;
     }
     selectedNodeIdx = parseInt(val);
+    selectedSlotIdx = 0;
     localStorage.setItem('isi_sel_node', selectedNodeIdx);
     onAccountSelected();
 };
@@ -400,14 +402,60 @@ window.onAccountChange = function () {
 function onAccountSelected() {
     updateModeBadge(); updateSelectedInfoBar(); highlightSelectedCard();
     document.getElementById('noClusterWarn').className = '';
-    // Update chart title to show account mode
     const n = getActiveNode();
     const titleEl = document.getElementById('equityChartTitle');
     if (titleEl && n) titleEl.textContent = `1. Equity Pulse — ${n.title || 'Account ' + (selectedNodeIdx + 1)}`;
     loadNodeData();
+    populateTradeSlotDropdown();
     updateRiskCalc();
     renderAll();
 }
+
+// ──────────────────────────────────────────────
+// TRADE SLOT DROPDOWN
+// Shows all time slots of selected node for today
+// If only 1 slot → hide dropdown, auto-select slot 0
+// If multiple slots → show dropdown
+// ──────────────────────────────────────────────
+let selectedSlotIdx = 0; // which slot is active for risk calc
+
+function populateTradeSlotDropdown() {
+    const wrap = document.getElementById('tradeSlotWrap');
+    const sel  = document.getElementById('tradeSlotSelect');
+    if (!wrap || !sel) return;
+
+    const n = getActiveNode();
+    if (!n) { wrap.style.display = 'none'; return; }
+
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const slots   = getNodeSlotsForDay(n, dayName);
+
+    sel.innerHTML = '';
+    if (slots.length <= 1) {
+        // Only 1 slot — hide dropdown, use slot 0
+        wrap.style.display = 'none';
+        selectedSlotIdx = 0;
+        return;
+    }
+
+    // Multiple slots — show dropdown
+    wrap.style.display = 'block';
+    slots.forEach((sl, i) => {
+        const o = document.createElement('option');
+        o.value = i;
+        o.textContent = `Slot ${i + 1}  ${sl.start} → ${sl.expire || '--'}  (Risk: ${sl.risk}%)`;
+        sel.appendChild(o);
+    });
+    selectedSlotIdx = 0;
+    sel.value = '0';
+}
+
+window.onTradeSlotChange = function () {
+    const val = document.getElementById('tradeSlotSelect').value;
+    selectedSlotIdx = val !== '' ? parseInt(val) : 0;
+    updateRiskCalc();
+    updateSelectedInfoBar();
+};
 
 
 // ──────────────────────────────────────────────
@@ -432,18 +480,13 @@ function updateSelectedInfoBar() {
     const liveBal  = s.currentBal ?? n.balance ?? 0;
     const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
     const slots    = getNodeSlotsForDay(n, dayName);
-    // Show first slot's risk; if multiple slots, show range
-    const rAmt     = slots.length > 0
-        ? (liveBal * (slots[0].risk ?? n.risk ?? 0) / 100).toFixed(2)
-        : (liveBal * (n.risk || 0) / 100).toFixed(2);
-    const timeWindow = slots.length > 0
-        ? slots.map(sl => `${sl.start}→${sl.expire||'--'}`).join(' | ')
-        : 'Not set';
+    const slot     = slots[selectedSlotIdx] || slots[0] || {};
+    const riskPct  = slot.risk ?? n.risk ?? 0;
+    const rAmt     = (liveBal * riskPct / 100).toFixed(2);
+    const timeWindow = slot.start ? `${slot.start} → ${slot.expire || '--'}` : 'Not set';
 
     document.getElementById('sibName').textContent    = n.title || ('Account ' + (selectedNodeIdx + 1));
     document.getElementById('sibBal').textContent     = `${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    document.getElementById('sibRisk').textContent    = `${n.risk}%`;
-    document.getElementById('sibQty').textContent     = `${n.qtyFrom} – ${n.qtyTo}`;
     document.getElementById('sibTime').textContent    = timeWindow;
     document.getElementById('sibRiskAmt').textContent = `${n.curr}${rAmt}`;
     bar.classList.add('vis');
@@ -468,36 +511,25 @@ function removeCardHighlight() {
 // ──────────────────────────────────────────────
 window.updateRiskCalc = function () {
     const n = getActiveNode();
-    if (!n) {
-        document.getElementById('accountInfo').textContent = 'Select Cluster + Account from header to calculate risk...';
-        return;
-    }
-    const asset   = document.getElementById('assetSelect').value;
+    if (!n) return;
+
     const s       = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal = s.currentBal ?? n.balance ?? 0;
-    // Use first slot's risk, fallback to node.risk for old format
     const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
     const slots   = getNodeSlotsForDay(n, dayName);
-    const riskPct = slots.length > 0 ? (slots[0].risk ?? n.risk ?? 0.35) : (n.risk || 0.35);
+    const slot    = slots[selectedSlotIdx] || slots[0] || {};
+    const riskPct = slot.risk ?? n.risk ?? 0.35;
     const rAmt    = liveBal * riskPct / 100;
-    let hint      = '';
 
+    // Update riskQty input (used by flow status)
+    const asset = document.getElementById('assetSelect')?.value;
     if (asset === 'XAUUSD') {
         const mn = ((rAmt / 7) * 0.01).toFixed(2);
         const mx = ((rAmt / 2.5) * 0.01).toFixed(2);
-        hint     = `Suggested: <b>${mn} – ${mx} Lots</b> (Gold $2.5–$7 SL range)`;
-        document.getElementById('riskQty').value = `${mn} - ${mx}`;
-    } else {
-        hint = `Risk Amount: <b>${n.curr}${rAmt.toFixed(2)}</b> | Adjust qty manually for ${asset}`;
+        const rqEl = document.getElementById('riskQty');
+        if (rqEl) rqEl.value = `${mn} - ${mx}`;
     }
 
-    document.getElementById('accountInfo').innerHTML = `
-        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-            <span>ACC: <b>${n.title||'Account '+(selectedNodeIdx+1)}</b></span>
-            <span>RISK AMT: <b style="color:var(--accent)">${n.curr}${rAmt.toFixed(2)}</b></span>
-            <span>LIVE BAL: <b style="color:var(--gold)">${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></span>
-        </div>
-        <div style="margin-top:4px;font-size:0.75rem;color:#aaa;">${hint}</div>`;
     updateFlowStatus();
 };
 
