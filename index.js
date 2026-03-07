@@ -111,7 +111,7 @@ function getNodeSlotsForDay(node, dayName) {
             start:   t.start,
             end:     t.end    || '',
             expire:  t.expire || '',
-            risk:    node.risk    || 0.35,
+            risk:    node.risk    ?? null,
             qtyFrom: node.qtyFrom || 1,
             qtyTo:   node.qtyTo   || 10,
             slotIdx: 0
@@ -420,8 +420,6 @@ function onAccountSelected() {
 // If only 1 slot → hide dropdown, auto-select slot 0
 // If multiple slots → show dropdown
 // ──────────────────────────────────────────────
-let selectedSlotIdx = 0; // which slot is active for risk calc
-
 function populateTradeSlotDropdown() {
     const wrap = document.getElementById('tradeSlotWrap');
     const sel  = document.getElementById('tradeSlotSelect');
@@ -474,6 +472,28 @@ function updateModeBadge() {
     b.textContent = n.title || ('Account ' + (selectedNodeIdx + 1));
 }
 
+// ──────────────────────────────────────────────
+// HELPER — get risk% for a node
+// Priority: today's selected slot → any slot from any day → node.risk → 0
+// ──────────────────────────────────────────────
+function getNodeRisk(node, dayName, slotIdx) {
+    slotIdx = slotIdx || 0;
+    // 1. Try today's slot
+    const todaySlots = getNodeSlotsForDay(node, dayName);
+    const todaySlot  = todaySlots[slotIdx] || todaySlots[0];
+    if (todaySlot && todaySlot.risk != null) return todaySlot.risk;
+
+    // 2. Try any day's first slot (pick first non-empty day)
+    const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+    for (const d of days) {
+        const s = getNodeSlotsForDay(node, d);
+        if (s.length > 0 && s[0].risk != null) return s[0].risk;
+    }
+
+    // 3. Fallback to node-level risk (old format)
+    return node.risk ?? 0;
+}
+
 function updateSelectedInfoBar() {
     const bar = document.getElementById('selectedInfoBar');
     if (!selectedClusterId || selectedNodeIdx === null) { bar.classList.remove('vis'); return; }
@@ -484,9 +504,9 @@ function updateSelectedInfoBar() {
     const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
     const slots    = getNodeSlotsForDay(n, dayName);
     const slot     = slots[selectedSlotIdx] || slots[0] || {};
-    const riskPct  = slot.risk ?? n.risk ?? 0;
+    const riskPct  = getNodeRisk(n, dayName, selectedSlotIdx);
     const rAmt     = (liveBal * riskPct / 100).toFixed(2);
-    const timeWindow = slot.start ? `${slot.start} → ${slot.expire || '--'}` : 'Not set';
+    const timeWindow = slot.start ? `${slot.start} → ${slot.expire || '--'}` : 'Not set (today)';
 
     document.getElementById('sibName').textContent    = n.title || ('Account ' + (selectedNodeIdx + 1));
     document.getElementById('sibBal').textContent     = `${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -519,9 +539,7 @@ window.updateRiskCalc = function () {
     const s       = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal = s.currentBal ?? n.balance ?? 0;
     const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const slots   = getNodeSlotsForDay(n, dayName);
-    const slot    = slots[selectedSlotIdx] || slots[0] || {};
-    const riskPct = slot.risk ?? n.risk ?? 0.35;
+    const riskPct = getNodeRisk(n, dayName, selectedSlotIdx);
     const rAmt    = liveBal * riskPct / 100;
 
     // Update riskQty input (used by flow status)
