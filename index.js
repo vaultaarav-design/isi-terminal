@@ -916,7 +916,8 @@ window.changeChartRange = function(idx) {
 // ──────────────────────────────────────────────
 function getPulseColor(trade) {
     if (!trade) return '#c5a059';
-    if (trade.type === 'Stop Loss') return '#d32f2f';
+    if (trade.type === 'Stop Loss')   return '#d32f2f'; // RED
+    if (trade.type === 'Break Even')  return '#1565c0'; // BLUE
     const scales      = (trade.scale || []).filter(s => s && s.trim() !== '');
     const scaleFilled = scales.length;
     if (scaleFilled >= 2) return '#00ff41'; // GREEN — good exit

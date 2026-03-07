@@ -7,146 +7,311 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
     <link rel="stylesheet" href="style.css">
     <style>
-        body { padding: 14px; background: #000; min-height: 100vh; }
-        .mc-container { max-width: 1200px; margin: 0 auto; }
+        body { padding: 16px; background: #000; min-height: 100vh; }
+        .mc-wrap { max-width: 1200px; margin: 0 auto; }
 
-        .mc-header {
-            display: flex; align-items: center; justify-content: space-between;
-            flex-wrap: wrap; gap: 10px; margin-bottom: 16px;
-        }
-        .mc-title { font-size: 0.72rem; color: #00aaff; letter-spacing: 3px; font-weight: bold; }
-        .mc-back {
-            display: inline-flex; align-items: center; gap: 6px;
-            background: linear-gradient(135deg,#000d1a,#001a33);
-            border: 2px solid #00aaff; color: #00aaff;
-            padding: 7px 14px; border-radius: 5px; font-weight: bold;
-            font-size: 0.7rem; text-decoration: none; letter-spacing: 1px;
+        /* HEADER */
+        .mc-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
+        .mc-title  { font-size:0.72rem; color:#00aaff; letter-spacing:3px; font-weight:bold; }
+        .mc-sub    { font-size:0.6rem; color:#555; margin-top:3px; }
+        .mc-back   {
+            display:inline-flex; align-items:center; gap:6px;
+            background:linear-gradient(135deg,#000d1a,#001a33);
+            border:2px solid #00aaff; color:#00aaff;
+            padding:8px 14px; border-radius:5px; font-weight:bold;
+            font-size:0.7rem; text-decoration:none; letter-spacing:1px; white-space:nowrap;
         }
 
-        /* RANGE BUTTONS */
-        .rng-row {
-            display: flex; flex-direction: row; align-items: center;
-            gap: 6px; overflow-x: auto; padding-bottom: 4px;
-            margin-bottom: 12px; -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
-        }
-        .rng-row::-webkit-scrollbar { display: none; }
-        .rng-btn {
-            flex: 0 0 auto; padding: 6px 13px; border-radius: 4px;
-            font-size: 0.62rem; font-weight: bold; cursor: pointer;
-            border: 1px solid #333; background: #111; color: #666;
-            letter-spacing: 1px; white-space: nowrap; transition: all 0.15s;
-        }
-        .rng-btn.active { border-color: var(--gold); background: #1a1200; color: var(--gold); }
-        .wr-badge {
-            flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
-            background: #0a0a00; border: 1px solid #2a2a00;
-            border-radius: 4px; padding: 5px 11px;
-        }
-        .wr-label { font-size: 0.55rem; color: #555; letter-spacing: 1px; }
-        .wr-val { font-size: 1rem; font-weight: 900; color: var(--gold); }
+        /* CHART CARD */
+        .chart-card { background:#0a0a0a; border:1px solid #1a1a1a; border-radius:8px; padding:14px; margin-bottom:14px; }
+        .chart-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px; }
+        .chart-card-title { font-size:0.88rem; color:#ccc; font-weight:bold; margin:0; }
 
-        /* CHART BOX */
-        .chart-box {
-            background: #020202; border: 1px solid #111; border-radius: 8px;
-            padding: 10px; margin-bottom: 14px; position: relative; height: 220px;
+        /* RANGE BUTTONS — exact same as dashboard index.html */
+        .chart-range-btns { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+        .chart-range-btns button {
+            padding:3px 9px; font-size:0.65rem; background:#1a1a1a;
+            border:1px solid #333; width:auto; color:#aaa; border-radius:3px;
+            cursor:pointer; transition:all 0.15s; white-space:nowrap;
         }
-        .chart-box canvas { width: 100% !important; height: 100% !important; }
-        .chart-empty {
-            display: none; position: absolute; inset: 0;
-            align-items: center; justify-content: center;
-            color: #333; font-size: 0.75rem; text-align: center;
+        .chart-range-btns button.active { background:var(--gold); color:#000; border-color:var(--gold); }
+
+        /* CHART CONTAINER — exact same as dashboard */
+        .chart-container {
+            height:320px; margin-top:12px;
+            background:radial-gradient(circle,#0a0a0a 0%,#000 100%);
+            padding:10px; border-radius:8px; border:1px solid #1a1a1a;
+            position:relative; overflow:hidden;
         }
+        .chart-container canvas { width:100% !important; height:100% !important; z-index:3; position:relative; }
+
+        /* WIN RATE BADGE — top right inside chart, same as dashboard */
+        #innerWinRate {
+            position:absolute; top:16px; right:16px;
+            background:rgba(255,255,255,0.04); padding:7px;
+            border-radius:5px; border:1px solid #222; z-index:2; font-family:monospace;
+        }
+
+        /* LOADING / EMPTY overlays */
         .chart-loading {
-            position: absolute; inset: 0;
-            display: flex; align-items: center; justify-content: center;
-            color: #444; font-size: 0.75rem;
+            position:absolute; inset:0; display:flex;
+            align-items:center; justify-content:center;
+            color:#444; font-size:0.78rem; z-index:4;
+            background:radial-gradient(circle,#0a0a0a 0%,#000 100%);
         }
+        .chart-empty {
+            display:none; position:absolute; inset:0;
+            align-items:center; justify-content:center;
+            color:#333; font-size:0.78rem; z-index:4;
+        }
+
+        /* FULLSCREEN BUTTON */
+        .fs-btn {
+            padding:3px 10px; font-size:0.65rem; background:#1a1a1a;
+            border:1px solid #333; color:#888; border-radius:3px;
+            cursor:pointer; white-space:nowrap; margin-left:4px;
+        }
+        .fs-btn:hover { border-color:#555; color:#ccc; }
+
+        /* FULLSCREEN MODE */
+        body.fs-mode { padding:0; overflow:hidden; }
+        body.fs-mode .mc-header,
+        body.fs-mode .stats-row,
+        body.fs-mode #clusterSection,
+        body.fs-mode footer { display:none !important; }
+        body.fs-mode .mc-wrap { max-width:100%; }
+        body.fs-mode .chart-card { margin:0; border-radius:0; border:none; padding:8px; height:100vh; box-sizing:border-box; display:flex; flex-direction:column; }
+        body.fs-mode .chart-card-top { flex-shrink:0; }
+        body.fs-mode .chart-container { flex:1; height:auto; margin-top:8px; }
 
         /* STATS ROW */
-        .stats-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-        .stat-card {
-            background: #060606; border: 1px solid #1a1a1a;
-            border-radius: 5px; padding: 8px 14px; min-width: 80px;
-        }
-        .stat-card .lbl { font-size: 0.55rem; color: #444; letter-spacing: 1px; margin-bottom: 3px; }
-        .stat-card .val { font-size: 0.78rem; font-weight: bold; }
+        .stats-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+        .stat-card { background:#060606; border:1px solid #1a1a1a; border-radius:5px; padding:8px 16px; }
+        .stat-lbl  { font-size:0.55rem; color:#444; letter-spacing:1px; margin-bottom:3px; text-transform:uppercase; }
+        .stat-val  { font-size:0.82rem; font-weight:bold; }
 
         /* CLUSTER LIST */
-        .cluster-section { margin-bottom: 8px; background: #040404; border: 1px solid #1a1a1a; border-radius: 8px; overflow: hidden; }
-        .cluster-header {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 14px; background: #060606; cursor: pointer;
-        }
-        .cluster-header input[type="checkbox"] { accent-color: #00aaff; width: 16px; height: 16px; flex-shrink: 0; }
-        .cluster-name { font-size: 0.76rem; font-weight: bold; color: #00aaff; flex: 1; }
-        .cluster-count { font-size: 0.58rem; color: #444; }
-        .accounts-list { padding: 0 14px 8px; }
-        .account-row {
-            display: flex; align-items: center; gap: 8px;
-            padding: 6px 0 6px 8px; border-top: 1px solid #0d0d0d;
-        }
-        .account-row input[type="checkbox"] { accent-color: var(--accent); width: 13px; height: 13px; flex-shrink: 0; }
-        .acc-name { font-size: 0.68rem; color: #aaa; flex: 1; }
-        .acc-bal { font-size: 0.65rem; color: var(--gold); font-family: monospace; }
-        .acc-net { font-size: 0.62rem; font-family: monospace; }
-
-        .fb-status { font-size: 0.6rem; color: #555; margin-bottom: 10px; }
+        .cluster-section { margin-bottom:8px; background:#040404; border:1px solid #1a1a1a; border-radius:8px; overflow:hidden; }
+        .cluster-hdr     { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#060606; }
+        .cluster-hdr input[type="checkbox"] { accent-color:#00aaff; width:16px; height:16px; flex-shrink:0; cursor:pointer; }
+        .cluster-nm  { font-size:0.76rem; font-weight:bold; color:#00aaff; flex:1; }
+        .cluster-cnt { font-size:0.58rem; color:#444; }
+        .acc-list    { padding:0 14px 8px; }
+        .acc-row     { display:flex; align-items:center; gap:8px; padding:6px 0 6px 8px; border-top:1px solid #0d0d0d; }
+        .acc-row input[type="checkbox"] { accent-color:var(--accent); width:13px; height:13px; flex-shrink:0; cursor:pointer; }
+        .acc-name { font-size:0.68rem; color:#aaa; flex:1; }
+        .acc-bal  { font-size:0.65rem; color:var(--gold); font-family:monospace; }
+        .acc-net  { font-size:0.62rem; font-family:monospace; }
     </style>
 </head>
 <body>
-<div class="mc-container">
+<div class="mc-wrap">
 
     <!-- HEADER -->
     <div class="mc-header">
         <div>
             <div class="mc-title">📊 MULTI CLUSTER — INSTITUTIONAL EQUITY PULSE</div>
-            <div id="fbStatus" class="fb-status">● Connecting...</div>
+            <div id="fbStatus" class="mc-sub">● Connecting to Firebase...</div>
         </div>
         <a href="monitoring.html" class="mc-back">← Monitoring</a>
     </div>
 
-    <!-- RANGE BUTTONS -->
-    <div class="rng-row">
-        <button class="rng-btn" onclick="setRange(0)" id="rng0">WEEKLY</button>
-        <button class="rng-btn active" onclick="setRange(1)" id="rng1">MONTHLY</button>
-        <button class="rng-btn" onclick="setRange(2)" id="rng2">QUARTERLY</button>
-        <button class="rng-btn" onclick="setRange(3)" id="rng3">HALF-YEARLY</button>
-        <button class="rng-btn" onclick="setRange(4)" id="rng4">ANNUAL</button>
-        <div class="wr-badge">
-            <span class="wr-label">WIN RATE</span>
-            <span class="wr-val" id="wrVal">0%</span>
+    <!-- CHART CARD -->
+    <div class="chart-card" id="chartCard">
+        <div class="chart-card-top">
+            <h2 class="chart-card-title">Multi Cluster Equity Pulse</h2>
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                <!-- RANGE BUTTONS — same style as dashboard -->
+                <div class="chart-range-btns">
+                    <button onclick="setRange(0)" id="rng0">Weekly</button>
+                    <button onclick="setRange(1)" id="rng1" class="active">Monthly</button>
+                    <button onclick="setRange(2)" id="rng2">Quarterly</button>
+                    <button onclick="setRange(3)" id="rng3">Half-Yearly</button>
+                    <button onclick="setRange(4)" id="rng4">Annual</button>
+                </div>
+                <button class="fs-btn" onclick="toggleFS()" id="fsBtn">⛶ Fullscreen</button>
+            </div>
+        </div>
+
+        <!-- CHART CONTAINER — same as dashboard -->
+        <div class="chart-container" id="chartContainer">
+            <div class="chart-loading" id="chartLoading">⏳ Loading trades from Firebase...</div>
+            <canvas id="equityCanvas" style="display:none;"></canvas>
+            <div class="chart-empty" id="chartEmpty">No trades found for selected filters.</div>
+            <!-- WIN RATE — same position as dashboard -->
+            <div id="innerWinRate">
+                <span style="color:#888;font-size:0.62rem;">WIN RATE:</span><br>
+                <span id="wrVal" style="color:var(--gold);font-size:1.1rem;font-weight:bold;">0%</span>
+            </div>
         </div>
     </div>
 
-    <!-- CHART -->
-    <div class="chart-box">
-        <div class="chart-loading" id="chartLoading">⏳ Loading trades...</div>
-        <canvas id="equityCanvas" style="display:none;"></canvas>
-        <div class="chart-empty" id="chartEmpty">No trades found for selected filters.</div>
-    </div>
-
-    <!-- STATS -->
+    <!-- STATS ROW -->
     <div class="stats-row" id="statsRow"></div>
 
-    <!-- CLUSTER LIST -->
-    <div style="font-size:0.55rem;color:#333;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">Filter Clusters & Accounts</div>
-    <div id="clusterList"></div>
+    <!-- CLUSTER FILTER -->
+    <div id="clusterSection">
+        <div style="font-size:0.55rem;color:#333;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">Filter Clusters & Accounts</div>
+        <div id="clusterList"></div>
+    </div>
 
-</div>
+</div><!-- /mc-wrap -->
+
+<!-- ══════════════════════════════════════════════
+     FOOTER
+══════════════════════════════════════════════ -->
+<footer style="background:#000;border-top:1px solid #1a1a00;margin-top:50px;">
+
+    <!-- BRAND HERO -->
+    <div style="text-align:center;padding:40px 20px 28px;border-bottom:1px solid #111;">
+        <div style="font-size:2rem;font-weight:900;color:var(--gold);letter-spacing:6px;font-family:'Segoe UI',sans-serif;">INFLLAX</div>
+        <div style="font-size:0.65rem;color:#555;letter-spacing:4px;margin-top:6px;">INSTITUTIONAL INTELLIGENCE · PRECISION EXECUTION · RULE-BASED SYSTEMS</div>
+        <div style="width:60px;height:2px;background:var(--gold);margin:16px auto 0;"></div>
+    </div>
+
+    <!-- ABOUT GRID -->
+    <div style="max-width:1200px;margin:0 auto;padding:36px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:28px;">
+
+        <!-- WHAT IS THIS PAGE -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                WHAT IS THIS PAGE
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.8;">
+                <b style="color:#ccc;">Multi Cluster Equity Pulse</b> ek unified portfolio view hai jo ek saath <b style="color:#00aaff;">saare trading clusters aur accounts</b> ka combined equity performance ek single chart mein dikhata hai.
+                <br><br>
+                Chahe ek cluster select karo, multiple karo, ya specific accounts filter karo — sab ka combined equity curve ek jagah milta hai.
+            </div>
+        </div>
+
+        <!-- HOW IT WORKS -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                HOW IT WORKS
+            </div>
+            <div style="font-size:0.7rem;color:#888;line-height:1.9;">
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">01</span>
+                    <span><b style="color:#bbb;">Cluster Tick ON</b> — Pura cluster aur uske saare accounts chart mein include ho jaate hain</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">02</span>
+                    <span><b style="color:#bbb;">Account Tick</b> — Sirf selected accounts ka equity dikhata hai — baaki exclude</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">03</span>
+                    <span><b style="color:#bbb;">Range Buttons</b> — Weekly · Monthly · Quarterly · Half-Yearly · Annual time filter</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">04</span>
+                    <span><b style="color:#bbb;">Combined Curve</b> — Saare selected trades chronologically merge hoke ek equity curve banate hain. INR trades auto USD mein convert hote hain</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHART COLOR LOGIC -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                CHART COLOR LOGIC
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.9;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#00ff41;flex-shrink:0;box-shadow:0 0 8px #00ff41;"></span>
+                    <span><b style="color:#bbb;">Green Glow</b> — Full Win (2+ scales booked)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#1565c0;flex-shrink:0;box-shadow:0 0 8px #4a9eff;"></span>
+                    <span><b style="color:#bbb;">Blue Glow</b> — Partial Win (1 scale booked)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#d32f2f;flex-shrink:0;box-shadow:0 0 8px #d32f2f;"></span>
+                    <span><b style="color:#bbb;">Red Glow</b> — Stop Loss hit</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#c5a059;flex-shrink:0;box-shadow:0 0 8px #c5a059;"></span>
+                    <span><b style="color:#bbb;">Gold</b> — Starting balance point</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- WHY IT EXISTS -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                WHY IT EXISTS
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.8;">
+                Ek trader ke paas multiple accounts hote hain — demo, live, prop firm. Har ek ka performance alag alag dekhna incomplete picture deta hai.
+                <br><br>
+                Yeh page <b style="color:var(--gold);">overall portfolio health</b> ek nazar mein dikhata hai — jaise ek fund manager apna entire book ek chart mein dekhta hai.
+                <br><br>
+                <i style="color:#555;">"See the forest, not just the trees."</i>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TECH STACK -->
+    <div style="border-top:1px solid #111;border-bottom:1px solid #111;padding:20px 24px;background:#040404;">
+        <div style="max-width:1200px;margin:0 auto;">
+            <div style="font-size:0.58rem;color:#444;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;">TECHNOLOGY STACK</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">⚡ Vanilla JS (ES Modules)</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">🔥 Firebase Realtime DB</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">📊 Chart.js — Institutional Glow Curve</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">💱 Live USD/INR Auto Conversion</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">📱 PWA Ready</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">🌐 GitHub Pages Hosted</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- VERSION + QUICK LINKS -->
+    <div style="max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">VERSION</div>
+            <div style="font-size:0.75rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+            <div style="font-size:0.62rem;color:#333;margin-top:4px;">Active Development · 2025</div>
+        </div>
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">SYSTEM ARCHITECT</div>
+            <div style="font-size:0.75rem;color:#666;"><b style="color:#ccc;">Aarav (Ravi)</b></div>
+            <div style="font-size:0.62rem;color:#333;margin-top:4px;">Founder · Infllax</div>
+        </div>
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">QUICK LINKS</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+                <a href="index.html"      style="font-size:0.65rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                <a href="monitoring.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Monitoring</a>
+                <a href="preentry.html"   style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
+                <a href="knowledge.html"  style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                <a href="Settings.html"   style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- COPYRIGHT -->
+    <div style="text-align:center;padding:16px;border-top:1px solid #0d0d0d;font-size:0.6rem;color:#2a2a2a;letter-spacing:2px;">
+        © 2025 INFLLAX · ALL RIGHTS RESERVED · AARAV (RAVI) · ISI TERMINAL v6.0
+    </div>
+
+</footer>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
-    authDomain: "trading-terminal-b8006.firebaseapp.com",
-    projectId: "trading-terminal-b8006",
-    storageBucket: "trading-terminal-b8006.firebasestorage.app",
+    apiKey:            "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
+    authDomain:        "trading-terminal-b8006.firebaseapp.com",
+    projectId:         "trading-terminal-b8006",
+    storageBucket:     "trading-terminal-b8006.firebasestorage.app",
     messagingSenderId: "690730161822",
-    appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
-    databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
+    appId:             "1:690730161822:web:81dabfd7b4575e86860d8f",
+    databaseURL:       "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
@@ -154,13 +319,13 @@ const db  = getDatabase(app);
 // ── STATE ──
 let clusters   = {};
 let liveStats  = {};
-let selections = {}; // { cId: { on:bool, nodes:{nIdx:bool} } }
+let selections = {};
 let rangeIdx   = 1;
 let chartInst  = null;
 const RANGES   = [7, 30, 90, 180, 365];
-
-// ── USD/INR ──
 let usdInrRate = 84;
+
+// ── CURRENCY ──
 async function loadRate() {
     try {
         const r = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
@@ -169,65 +334,71 @@ async function loadRate() {
     } catch(e) {}
 }
 
-// ── PULSE COLORS — same as dashboard ──
+// ── PULSE COLORS — exact same as dashboard ──
 function pulseColor(t) {
     if (!t) return '#c5a059';
-    if (t.type === 'Stop Loss') return '#d32f2f';
-    const sc = (t.scale||[]).filter(s=>s&&s.trim()).length;
+    if (t.type === 'Stop Loss')  return '#d32f2f'; // RED
+    if (t.type === 'Break Even') return '#1565c0'; // BLUE
+    const sc = (t.scale||[]).filter(s => s && s.trim()).length;
     return sc >= 2 ? '#00ff41' : sc === 1 ? '#1565c0' : '#00ff41';
 }
 function glowColor(c) {
-    if (c==='#d32f2f') return 'rgba(211,47,47,0.85)';
-    if (c==='#1565c0') return 'rgba(21,101,192,0.85)';
-    if (c==='#00ff41') return 'rgba(0,255,65,0.85)';
+    if (c === '#d32f2f') return 'rgba(211,47,47,0.85)';
+    if (c === '#1565c0') return 'rgba(21,101,192,0.85)';
+    if (c === '#00ff41') return 'rgba(0,255,65,0.85)';
     return 'rgba(197,160,89,0.6)';
 }
 
-// ── FIREBASE LOAD ──
+// ── FIREBASE LISTENERS ──
 onValue(ref(db, 'isi_v6/clusters'), snap => {
     clusters = snap.val() || {};
     document.getElementById('fbStatus').textContent = '● LIVE — Firebase Connected';
     document.getElementById('fbStatus').style.color = '#00c805';
-
-    // Init selections
+    // Init selections — all ON
     Object.entries(clusters).forEach(([cId, cluster]) => {
         if (!selections[cId]) {
             selections[cId] = { on: true, nodes: {} };
-            (cluster.nodes||[]).forEach((_,i) => selections[cId].nodes[i] = true);
+            (cluster.nodes||[]).forEach((_, i) => selections[cId].nodes[i] = true);
         }
     });
-
     buildClusterList();
     loadAndRender();
 });
 
 onValue(ref(db, 'isi_v6/stats'), snap => {
     liveStats = snap.val() || {};
-    buildClusterList(); // refresh balances
+    buildClusterList(); // refresh live balances
 });
 
 // ── RANGE ──
 window.setRange = function(idx) {
     rangeIdx = idx;
-    for (let i=0;i<5;i++) {
-        const b = document.getElementById('rng'+i);
+    for (let i = 0; i < 5; i++) {
+        const b = document.getElementById('rng' + i);
         if (!b) continue;
-        b.classList.toggle('active', i===idx);
+        if (i === idx) { b.classList.add('active'); }
+        else           { b.classList.remove('active'); }
     }
     loadAndRender();
 };
 
-// ── TOGGLE ──
+// ── FULLSCREEN ──
+window.toggleFS = function() {
+    const isFs = document.body.classList.toggle('fs-mode');
+    document.getElementById('fsBtn').textContent = isFs ? '↙ Exit Fullscreen' : '⛶ Fullscreen';
+    if (chartInst) setTimeout(() => chartInst.resize(), 150);
+};
+
+// ── CLUSTER / ACCOUNT TOGGLE ──
 window.toggleCluster = function(cId, on) {
-    if (!selections[cId]) selections[cId] = { on, nodes:{} };
+    if (!selections[cId]) selections[cId] = { on, nodes: {} };
     selections[cId].on = on;
-    const nd = document.getElementById('nd_'+cId);
+    const nd = document.getElementById('nd_' + cId);
     if (nd) nd.style.display = on ? '' : 'none';
     loadAndRender();
 };
-
 window.toggleNode = function(cId, nIdx, on) {
-    if (!selections[cId]) selections[cId] = { on:true, nodes:{} };
+    if (!selections[cId]) selections[cId] = { on: true, nodes: {} };
     selections[cId].nodes[nIdx] = on;
     loadAndRender();
 };
@@ -239,59 +410,60 @@ function buildClusterList() {
     list.innerHTML = '';
 
     Object.entries(clusters).forEach(([cId, cluster]) => {
-        const sel   = selections[cId] || { on:true, nodes:{} };
+        const sel   = selections[cId] || { on: true, nodes: {} };
         const nodes = cluster.nodes || [];
 
         const nodeRows = nodes.map((node, nIdx) => {
             const stats  = liveStats[cId]?.[String(nIdx)] || {};
-            const bal    = (stats.currentBal ?? node.balance ?? 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+            const bal    = (stats.currentBal ?? node.balance ?? 0)
+                            .toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
             const net    = stats.net ?? 0;
             const curr   = node.curr || '$';
             const netCol = net >= 0 ? '#00c805' : '#ff3131';
             const chk    = sel.nodes[nIdx] !== false ? 'checked' : '';
-            return `<div class="account-row">
+            return `<div class="acc-row">
                 <input type="checkbox" ${chk} onchange="toggleNode('${cId}',${nIdx},this.checked)">
-                <span class="acc-name">${node.title||'Account '+(nIdx+1)}</span>
+                <span class="acc-name">${node.title || 'Account ' + (nIdx+1)}</span>
                 <span class="acc-bal">${curr}${bal}</span>
                 <span class="acc-net" style="color:${netCol}">${net>=0?'+':''}${curr}${Math.abs(net).toFixed(2)}</span>
             </div>`;
         }).join('');
 
         const cChk = sel.on ? 'checked' : '';
-        const sec = document.createElement('div');
+        const sec  = document.createElement('div');
         sec.className = 'cluster-section';
         sec.innerHTML = `
-            <div class="cluster-header">
+            <div class="cluster-hdr">
                 <input type="checkbox" ${cChk} onchange="toggleCluster('${cId}',this.checked)">
-                <span class="cluster-name">${cluster.title}</span>
-                <span class="cluster-count">${nodes.length} account${nodes.length!==1?'s':''}</span>
+                <span class="cluster-nm">${cluster.title}</span>
+                <span class="cluster-cnt">${nodes.length} account${nodes.length!==1?'s':''}</span>
             </div>
-            <div id="nd_${cId}" class="accounts-list" style="${sel.on?'':'display:none'}">${nodeRows}</div>`;
+            <div id="nd_${cId}" class="acc-list" style="${sel.on?'':'display:none'}">${nodeRows}</div>`;
         list.appendChild(sec);
     });
 }
 
-// ── LOAD ALL TRADES & RENDER ──
+// ── LOAD TRADES & RENDER CHART ──
 async function loadAndRender() {
-    const canvas   = document.getElementById('equityCanvas');
-    const loading  = document.getElementById('chartLoading');
-    const emptyEl  = document.getElementById('chartEmpty');
+    const canvas  = document.getElementById('equityCanvas');
+    const loading = document.getElementById('chartLoading');
+    const emptyEl = document.getElementById('chartEmpty');
 
+    // Show loading state
     loading.style.display = 'flex';
     canvas.style.display  = 'none';
     emptyEl.style.display = 'none';
 
     await loadRate();
 
-    // Load trades for each selected cluster from Firebase
+    // Load all selected cluster trades from Firebase
     const allTrades = [];
-
-    const promises = Object.entries(clusters).map(([cId, cluster]) => {
+    const promises  = Object.entries(clusters).map(([cId, cluster]) => {
         const sel = selections[cId];
         if (!sel || !sel.on) return Promise.resolve();
         const nodes = cluster.nodes || [];
 
-        const nodePr = nodes.map((node, nIdx) => {
+        return Promise.all(nodes.map((node, nIdx) => {
             if (sel.nodes[nIdx] === false) return Promise.resolve();
             return get(ref(db, `isi_v6/clusters/${cId}/nodes/${nIdx}/tradeHistory`))
                 .then(snap => {
@@ -301,32 +473,28 @@ async function loadAndRender() {
                         if (trade && trade.date) {
                             allTrades.push({
                                 ...trade,
-                                _cId:       cId,
-                                _nIdx:      nIdx,
-                                _nodeTitle: node.title || 'Account '+(nIdx+1),
-                                _curr:      node.curr || '$'
+                                _curr:      node.curr || '$',
+                                _nodeTitle: node.title || 'Account ' + (nIdx+1)
                             });
                         }
                     });
                 })
-                .catch(()=>{});
-        });
-        return Promise.all(nodePr);
+                .catch(() => {});
+        }));
     });
 
     await Promise.all(promises);
 
     // Sort chronologically
-    allTrades.sort((a,b) => {
+    allTrades.sort((a, b) => {
         const d = (a.date||'').localeCompare(b.date||'');
         return d !== 0 ? d : (a.savedAt||'').localeCompare(b.savedAt||'');
     });
 
     // Apply range
-    const maxT     = RANGES[rangeIdx];
-    const hist     = allTrades.slice(-maxT);
+    const hist = allTrades.slice(-RANGES[rangeIdx]);
 
-    // Start balance
+    // Start balance = sum of node.balance for selected nodes
     let startBal = 0;
     Object.entries(clusters).forEach(([cId, cluster]) => {
         const sel = selections[cId];
@@ -340,13 +508,14 @@ async function loadAndRender() {
     let running = startBal;
     const eqPts = [running];
     hist.forEach(t => {
-        const pl = (t._curr==='₹') ? (t.pl||0)/usdInrRate : (t.pl||0);
+        const pl = (t._curr === '₹') ? (t.pl||0) / usdInrRate : (t.pl||0);
         running += pl;
         eqPts.push(parseFloat(running.toFixed(2)));
     });
 
-    const wins = hist.filter(t=>t.type==='Target').length;
-    const wr   = hist.length ? ((wins/hist.length)*100).toFixed(1) : 0;
+    // Win rate
+    const wins = hist.filter(t => t.type === 'Target').length;
+    const wr   = hist.length ? ((wins / hist.length) * 100).toFixed(1) : 0;
     document.getElementById('wrVal').textContent = wr + '%';
 
     loading.style.display = 'none';
@@ -356,30 +525,32 @@ async function loadAndRender() {
         document.getElementById('statsRow').innerHTML = '';
         return;
     }
-
     canvas.style.display = '';
 
     // Colors + labels
-    const ptColors = eqPts.map((_,i) => i===0 ? '#c5a059' : pulseColor(hist[i-1]));
-    const labels   = eqPts.map((_,i) => {
-        if(i===0) return 'Start';
+    const ptColors = eqPts.map((_, i) => i === 0 ? '#c5a059' : pulseColor(hist[i-1]));
+    const labels   = eqPts.map((_, i) => {
+        if (i === 0) return 'Start';
         const t = hist[i-1];
-        return t?.date ? t.date.slice(5) : 'T'+i;
+        return t?.date ? t.date.slice(5) : 'T' + i;
     });
 
     if (chartInst) { chartInst.destroy(); chartInst = null; }
     const c2d = canvas.getContext('2d');
 
+    // Glow plugin — exact same as dashboard
     const glowPlugin = {
         id: 'mcGlow',
         afterDatasetsDraw(chart) {
-            chart.getDatasetMeta(0).data.forEach((pt,i) => {
+            chart.getDatasetMeta(0).data.forEach((pt, i) => {
                 const col = ptColors[i];
                 c2d.save();
-                c2d.shadowColor=glowColor(col); c2d.shadowBlur=18;
-                c2d.beginPath(); c2d.arc(pt.x,pt.y,5,0,Math.PI*2); c2d.fillStyle=col; c2d.fill();
-                c2d.shadowBlur=8;
-                c2d.beginPath(); c2d.arc(pt.x,pt.y,3,0,Math.PI*2); c2d.fillStyle=col; c2d.fill();
+                c2d.shadowColor = glowColor(col); c2d.shadowBlur = 18;
+                c2d.beginPath(); c2d.arc(pt.x, pt.y, 5, 0, Math.PI*2);
+                c2d.fillStyle = col; c2d.fill();
+                c2d.shadowBlur = 8;
+                c2d.beginPath(); c2d.arc(pt.x, pt.y, 3, 0, Math.PI*2);
+                c2d.fillStyle = col; c2d.fill();
                 c2d.restore();
             });
         }
@@ -391,11 +562,11 @@ async function loadAndRender() {
             labels,
             datasets: [{
                 data: eqPts,
-                segment: { borderColor: ctx => ptColors[ctx.p1DataIndex]||'#c5a059' },
+                segment: { borderColor: ctx => ptColors[ctx.p1DataIndex] || '#c5a059' },
                 borderWidth: 1.5,
                 pointRadius: 5, pointHoverRadius: 8,
-                pointBackgroundColor: ctx => ptColors[ctx.dataIndex]||'#c5a059',
-                pointBorderColor:     ctx => ptColors[ctx.dataIndex]||'#c5a059',
+                pointBackgroundColor: ctx => ptColors[ctx.dataIndex] || '#c5a059',
+                pointBorderColor:     ctx => ptColors[ctx.dataIndex] || '#c5a059',
                 pointBorderWidth: 1, tension: 0.35, fill: false
             }]
         },
@@ -408,40 +579,46 @@ async function loadAndRender() {
                     callbacks: {
                         title: items => {
                             const i = items[0].dataIndex;
-                            if (i===0) return 'Starting Balance';
+                            if (i === 0) return 'Starting Balance';
                             const t = hist[i-1];
                             return t ? `${t.date} — ${t._nodeTitle}` : items[0].label;
                         },
                         label: item => {
-                            const i=item.dataIndex, bal=item.parsed.y;
-                            if(i===0) return `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`;
-                            const t=hist[i-1]; if(!t) return `$${bal.toFixed(2)}`;
-                            const sc=(t.scale||[]).filter(s=>s).length;
-                            const out=t.type==='Stop Loss'?'🔴 SL':sc>=2?'🟢 FULL WIN':'🔵 PARTIAL';
-                            return [out,`P/L: $${(t.pl||0).toFixed(2)}`,`Bal: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`];
+                            const i = item.dataIndex, bal = item.parsed.y;
+                            if (i === 0) return `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`;
+                            const t = hist[i-1]; if (!t) return `$${bal.toFixed(2)}`;
+                            const sc  = (t.scale||[]).filter(s=>s).length;
+                            const out = t.type==='Stop Loss' ? '🔴 STOP LOSS' : sc>=2 ? '🟢 FULL WIN' : '🔵 PARTIAL';
+                            return [out, `P/L: $${(t.pl||0).toFixed(2)}`, `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`];
                         }
                     },
-                    backgroundColor:'#0d1117', borderColor:'#2a2a2a', borderWidth:1,
-                    titleColor:'#c5a059', bodyColor:'#aaa', padding:10
+                    backgroundColor: '#0d1117', borderColor: '#2a2a2a', borderWidth: 1,
+                    titleColor: '#c5a059', bodyColor: '#aaa', padding: 10
                 }
             },
             scales: {
-                y: { grid:{color:'rgba(255,255,255,0.03)'}, ticks:{color:'#555',font:{size:9},callback:v=>'$'+v.toLocaleString()} },
-                x: { grid:{display:false}, ticks:{color:'#444',font:{size:9},maxRotation:45,maxTicksLimit:12} }
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color:'#555', font:{size:9}, callback: v => '$' + v.toLocaleString('en-US') }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color:'#444', font:{size:9}, maxRotation:45, maxTicksLimit:12 }
+                }
             }
         },
         plugins: [glowPlugin]
     });
 
     // Stats
-    const net  = eqPts[eqPts.length-1] - eqPts[0];
-    const plC  = net>=0 ? '#00c805' : '#ff3131';
+    const net = eqPts[eqPts.length-1] - eqPts[0];
+    const plC = net >= 0 ? '#00c805' : '#ff3131';
     document.getElementById('statsRow').innerHTML = [
-        ['NET P/L', `<span style="color:${plC};font-family:monospace;">${net>=0?'+':''}$${Math.abs(net).toFixed(2)}</span>`],
+        ['NET P/L',  `<span style="color:${plC};font-family:monospace;">${net>=0?'+':''}$${Math.abs(net).toFixed(2)}</span>`],
         ['WIN RATE', `<span style="color:var(--gold);font-family:monospace;">${wr}%</span>`],
-        ['TRADES', `<span style="color:#ccc;font-family:monospace;">${hist.length}</span>`],
-        ['W / L', `<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${hist.length-wins}</span>`]
-    ].map(([l,v]) => `<div class="stat-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('');
+        ['TRADES',   `<span style="color:#ccc;font-family:monospace;">${hist.length}</span>`],
+        ['W / L',    `<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${hist.length-wins}</span>`]
+    ].map(([l, v]) => `<div class="stat-card"><div class="stat-lbl">${l}</div><div class="stat-val">${v}</div></div>`).join('');
 }
 </script>
 </body>
