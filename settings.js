@@ -83,7 +83,7 @@ function buildDaySlotHtml(day, nodeIdx, slots) {
             <input type="time" class="slot-start"  data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="${sl.start||''}" style="padding:3px;background:#000;border:1px solid #333;color:#fff;font-size:0.62rem;width:100%;">
             <input type="time" class="slot-end"    data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="${sl.end||''}"   style="padding:3px;background:#000;border:1px solid #333;color:#fff;font-size:0.62rem;width:100%;">
             <input type="time" class="slot-expire" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="${sl.expire||''}" style="padding:3px;background:#000;border:1px solid #333;color:#fff;font-size:0.62rem;width:100%;">
-            <input type="number" class="slot-risk" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="${sl.risk??0.35}" step="0.01" placeholder="Risk%" title="Risk %" style="padding:3px;background:#000;border:1px solid #444;color:var(--gold);font-size:0.62rem;width:100%;">
+            <input type="number" class="slot-risk" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="${sl.risk??''"}" step="0.01" placeholder="Risk%" title="Risk %" style="padding:3px;background:#000;border:1px solid #444;color:var(--gold);font-size:0.62rem;width:100%;">
             <input type="number" class="slot-qfrom" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="${sl.qtyFrom??1}" placeholder="Q-" title="Qty From" style="padding:3px;background:#000;border:1px solid #333;color:#aaa;font-size:0.6rem;width:100%;">
             <input type="number" class="slot-qto"   data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="${sl.qtyTo??10}" placeholder="Q+" title="Qty To" style="padding:3px;background:#000;border:1px solid #333;color:#aaa;font-size:0.6rem;width:100%;">
             ${sIdx === 0
@@ -106,7 +106,7 @@ window.addSlot = function(btn, day, nodeIdx) {
             <input type="time" class="slot-start"  data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" style="padding:3px;background:#000;border:1px solid #333;color:#fff;font-size:0.62rem;width:100%;">
             <input type="time" class="slot-end"    data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" style="padding:3px;background:#000;border:1px solid #333;color:#fff;font-size:0.62rem;width:100%;">
             <input type="time" class="slot-expire" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" style="padding:3px;background:#000;border:1px solid #333;color:#fff;font-size:0.62rem;width:100%;">
-            <input type="number" class="slot-risk" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="0.35" step="0.01" placeholder="Risk%" style="padding:3px;background:#000;border:1px solid #444;color:var(--gold);font-size:0.62rem;width:100%;">
+            <input type="number" class="slot-risk" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="" placeholder="Risk%" style="padding:3px;background:#000;border:1px solid #444;color:var(--gold);font-size:0.62rem;width:100%;">
             <input type="number" class="slot-qfrom" data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="1" placeholder="Q-" style="padding:3px;background:#000;border:1px solid #333;color:#aaa;font-size:0.6rem;width:100%;">
             <input type="number" class="slot-qto"   data-day="${day}" data-node="${nodeIdx}" data-slot="${sIdx}" value="10" placeholder="Q+" style="padding:3px;background:#000;border:1px solid #333;color:#aaa;font-size:0.6rem;width:100%;">
             <button onclick="removeSlot(this)" title="Remove slot" style="background:transparent;border:1px solid var(--danger);color:var(--danger);padding:2px 6px;border-radius:3px;cursor:pointer;font-size:0.75rem;">✕</button>
@@ -149,7 +149,7 @@ window.buildNodeUI = function(existingNodes = null, forceQty = null) {
             } else if (ex.times && ex.times[day]) {
                 // Migrate old format: single slot, copy risk from node level
                 const t = ex.times[day];
-                if (t.start) slots = [{ start: t.start, end: t.end||'', expire: t.expire||'', risk: ex.risk||0.35, qtyFrom: ex.qtyFrom||1, qtyTo: ex.qtyTo||10 }];
+                if (t.start) slots = [{ start: t.start, end: t.end||'', expire: t.expire||'', risk: ex.risk ?? null, qtyFrom: ex.qtyFrom||1, qtyTo: ex.qtyTo||10 }];
             }
             if (!slots.length) slots = [{}];
 
@@ -239,7 +239,7 @@ function collectNodeTimeSlots(card, nodeIdx) {
                 start,
                 end:     row.querySelector('.slot-end')?.value    || '',
                 expire:  row.querySelector('.slot-expire')?.value || '',
-                risk:    parseFloat(row.querySelector('.slot-risk')?.value  || 0.35),
+                risk:    parseFloat(row.querySelector('.slot-risk')?.value) || null,
                 qtyFrom: parseInt(row.querySelector('.slot-qfrom')?.value   || 1),
                 qtyTo:   parseInt(row.querySelector('.slot-qto')?.value     || 10),
             });

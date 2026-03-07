@@ -262,7 +262,7 @@ function renderTimerSlider() {
     todayCards.forEach(({ cId, cluster, node, nIdx, times, slotIdx }) => {
         const s       = getNodeStats(cId, nIdx);
         const liveBal = s.currentBal ?? node.balance ?? 0;
-        const slotRisk   = times.risk    ?? node.risk    ?? 0.35;
+        const slotRisk   = times.risk    ?? node.risk    ?? 0;
         const slotQFrom  = times.qtyFrom ?? node.qtyFrom ?? 1;
         const slotQTo    = times.qtyTo   ?? node.qtyTo   ?? 10;
         const riskAmt = (liveBal * slotRisk / 100).toFixed(0);
@@ -536,20 +536,9 @@ window.updateRiskCalc = function () {
     const n = getActiveNode();
     if (!n) return;
 
-    const s       = getNodeStats(selectedClusterId, selectedNodeIdx);
-    const liveBal = s.currentBal ?? n.balance ?? 0;
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const riskPct = getNodeRisk(n, dayName, selectedSlotIdx);
-    const rAmt    = liveBal * riskPct / 100;
-
-    // Update riskQty input (used by flow status)
-    const asset = document.getElementById('assetSelect')?.value;
-    if (asset === 'XAUUSD') {
-        const mn = ((rAmt / 7) * 0.01).toFixed(2);
-        const mx = ((rAmt / 2.5) * 0.01).toFixed(2);
-        const rqEl = document.getElementById('riskQty');
-        if (rqEl) rqEl.value = `${mn} - ${mx}`;
-    }
+    // Clear riskQty — user manually enters this
+    const rqEl = document.getElementById('riskQty');
+    if (rqEl && !rqEl.dataset.userEdited) rqEl.value = '';
 
     updateFlowStatus();
 };
