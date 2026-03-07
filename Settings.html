@@ -73,20 +73,21 @@
             <h3 style="color: var(--gold); margin-bottom:15px;">CLUSTER SETUP</h3>
             <input type="text" id="deskTitle" placeholder="Cluster Name (e.g. ALPHA FUND)" style="width:100%; padding:12px; background:#000; border:2px solid var(--gold); border-radius:6px; font-size:1rem;">
             
-            <div style="display:flex;gap:10px;align-items:center;margin:15px 0;">
-                <select id="nodeQty" onchange="onNodeQtyChange()" style="flex:1; padding:12px; background:#000; color:#fff; border:2px solid var(--gold); border-radius:6px; font-size:1rem;">
-                    <option value="0">Select Nodes</option>
-                    <option value="1">1 Node</option>
-                    <option value="3">3 Nodes</option>
-                    <option value="5">5 Nodes</option>
-                    <option value="custom">Custom</option>
-                </select>
-                <div id="customNodeBox" style="display:none;align-items:center;gap:6px;">
-                    <input type="number" id="customNodeCount" min="1" max="20" placeholder="Count" style="width:80px;padding:12px;background:#000;color:#fff;border:2px solid var(--gold);border-radius:6px;font-size:1rem;">
-                    <button onclick="applyCustomNodes()" style="padding:12px 16px;background:var(--gold);color:#000;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:0.85rem;white-space:nowrap;">✓ SET</button>
-                </div>
+            <select id="nodeQty" onchange="onNodeQtyChange()" style="width:100%; padding:12px; background:#000; color:#fff; border:2px solid var(--gold); border-radius:6px; margin:15px 0; font-size:1rem;">
+                <option value="0">Select Nodes</option>
+                <option value="1">1 Node</option>
+                <option value="3">3 Nodes</option>
+                <option value="5">5 Nodes</option>
+                <option value="custom">Custom</option>
+            </select>
+
+            <div id="customNodeBox" style="display:none; gap:8px; align-items:center; margin-bottom:12px;">
+                <input type="number" id="customNodeCount" min="1" max="20" placeholder="Count (1-20)"
+                    style="flex:1; padding:10px; background:#000; border:1px solid var(--gold); border-radius:4px; color:#fff; font-size:0.9rem;">
+                <button onclick="applyCustomNodes()"
+                    style="padding:10px 18px; background:var(--gold); color:#000; font-weight:bold; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">SET</button>
             </div>
-            
+
             <div id="nodeGrid"></div>
 
             <input type="password" id="resetKey" placeholder="Security Key" style="width:100%; padding:12px; background:#000; border:1px solid #333; border-radius:4px; margin:10px 0;">
