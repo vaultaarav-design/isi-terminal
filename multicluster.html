@@ -76,13 +76,14 @@
         /* FULLSCREEN MODE */
         body.fs-mode { padding:0; overflow:hidden; }
         body.fs-mode .mc-header,
-        body.fs-mode .stats-row,
         body.fs-mode #clusterSection,
         body.fs-mode footer { display:none !important; }
         body.fs-mode .mc-wrap { max-width:100%; }
         body.fs-mode .chart-card { margin:0; border-radius:0; border:none; padding:8px; height:100vh; box-sizing:border-box; display:flex; flex-direction:column; }
         body.fs-mode .chart-card-top { flex-shrink:0; }
-        body.fs-mode .chart-container { flex:1; height:auto; margin-top:8px; }
+        body.fs-mode .chart-container { flex:1; height:auto; margin-top:6px; }
+        body.fs-mode .stats-row { flex-shrink:0; margin-bottom:0; padding:4px 0; }
+        body.fs-mode #mcAIBox { display:none !important; }
 
         /* STATS ROW */
         .stats-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
@@ -151,7 +152,15 @@
 
     <!-- CLUSTER FILTER -->
     <div id="clusterSection">
-        <div style="font-size:0.55rem;color:#333;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">Filter Clusters & Accounts</div>
+        <!-- AI ANALYSIS BUTTON -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+            <div style="font-size:0.55rem;color:#333;letter-spacing:2px;text-transform:uppercase;">Filter Clusters & Accounts</div>
+            <button onclick="runMCAnalysis()" style="background:linear-gradient(135deg,#000800,#001400);border:1px solid var(--accent);color:var(--accent);padding:7px 16px;border-radius:5px;font-size:0.7rem;font-weight:bold;cursor:pointer;letter-spacing:1px;">
+                🤖 AI EQUITY ANALYSIS
+            </button>
+        </div>
+        <!-- AI BOX -->
+        <div id="mcAIBox" style="display:none;margin-bottom:14px;"></div>
         <div id="clusterList"></div>
     </div>
 
@@ -303,6 +312,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { callAI, showAILoading, renderAIResponse } from "./gemini.js";
 
 const firebaseConfig = {
     apiKey:            "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -620,6 +630,56 @@ async function loadAndRender() {
         ['W / L',    `<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${hist.length-wins}</span>`]
     ].map(([l, v]) => `<div class="stat-card"><div class="stat-lbl">${l}</div><div class="stat-val">${v}</div></div>`).join('');
 }
+
+// ── AI EQUITY ANALYSIS — same callAI logic as monitoring ──
+window.runMCAnalysis = async function() {
+    const box = document.getElementById('mcAIBox');
+    if (!box) return;
+
+    // Stats from rendered cards
+    const statCards = document.querySelectorAll('#statsRow .stat-card');
+    let netPL = '?', winRate = '?', trades = '?', wl = '?';
+    statCards.forEach(card => {
+        const lbl = card.querySelector('.stat-lbl')?.textContent?.trim();
+        const val = card.querySelector('.stat-val')?.textContent?.trim();
+        if (lbl === 'NET P/L')  netPL   = val;
+        if (lbl === 'WIN RATE') winRate = val;
+        if (lbl === 'TRADES')   trades  = val;
+        if (lbl === 'W / L')    wl      = val;
+    });
+
+    const selClusters = Object.entries(clusters)
+        .filter(([cId]) => selections[cId]?.on)
+        .map(([_, c]) => c.title).join(', ') || 'None';
+
+    const rangeName = ['Weekly','Monthly','Quarterly','Half-Yearly','Annual'][rangeIdx];
+    const wrBadge   = document.getElementById('wrVal')?.textContent || '?';
+
+    const prompt =
+`Multi Cluster Equity Pulse — Portfolio Analysis:
+
+Selected Clusters: ${selClusters}
+Time Range: ${rangeName}
+
+Portfolio Stats:
+Net P/L: ${netPL}
+Win Rate: ${winRate} (badge: ${wrBadge})
+Total Trades: ${trades}
+W / L: ${wl}
+
+Ab is portfolio ka deep analysis karo:
+1. Overall equity curve health — uptrend, downtrend ya choppy?
+2. Win rate ${winRate} — strong hai ya weak? Institutional benchmark se compare karo
+3. Net P/L ${netPL} — consistent growth hai ya ek baar ka spike?
+4. Kahan pe risk zyada hai aur kahan improvement chahiye?
+5. Agle ${rangeName.toLowerCase()} ke liye 3 specific actionable improvements
+6. Portfolio diversification — clusters ka balance theek hai ya ek dominant hai?`;
+
+    box.style.display = 'block';
+    showAILoading('mcAIBox');
+    const result = await callAI(prompt, 'mcAIBox');
+    renderAIResponse('mcAIBox', result, '🤖 AI Multi Cluster Portfolio Analysis');
+};
 </script>
 </body>
 </html>
