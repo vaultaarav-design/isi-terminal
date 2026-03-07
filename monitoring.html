@@ -302,17 +302,20 @@
         <button onclick="closeMultiCluster()" style="position:absolute;top:12px;right:12px;background:#cc0000;border:none;color:#fff;padding:6px 13px;border-radius:4px;font-weight:bold;cursor:pointer;font-size:0.75rem;">✕ CLOSE</button>
         <div style="font-size:0.68rem;color:#00aaff;letter-spacing:3px;font-weight:bold;margin-bottom:16px;">📊 MULTI CLUSTER — INSTITUTIONAL EQUITY PULSE</div>
 
-        <!-- RANGE BUTTONS — same as dashboard -->
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-            <button onclick="mcSetRange(0)" id="mcRng0" class="mc-rng-btn" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;">WEEKLY</button>
-            <button onclick="mcSetRange(1)" id="mcRng1" class="mc-rng-btn" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid var(--gold);background:#1a1200;color:var(--gold);letter-spacing:1px;">MONTHLY</button>
-            <button onclick="mcSetRange(2)" id="mcRng2" class="mc-rng-btn" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;">QUARTERLY</button>
-            <button onclick="mcSetRange(3)" id="mcRng3" class="mc-rng-btn" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;">HALF-YEARLY</button>
-            <button onclick="mcSetRange(4)" id="mcRng4" class="mc-rng-btn" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;">ANNUAL</button>
-            <!-- WIN RATE BADGE -->
-            <div style="margin-left:auto;display:flex;align-items:center;gap:6px;background:#0a0a00;border:1px solid #2a2a00;border-radius:4px;padding:4px 12px;">
-                <span style="font-size:0.6rem;color:#555;letter-spacing:1px;">WIN RATE</span>
-                <span id="mcWR" style="font-size:1rem;font-weight:900;color:var(--gold);">0%</span>
+        <!-- RANGE BUTTONS — horizontal, same as dashboard -->
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+            <button onclick="mcSetRange(0)" id="mcRng0" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;white-space:nowrap;">WEEKLY</button>
+            <button onclick="mcSetRange(1)" id="mcRng1" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid var(--gold);background:#1a1200;color:var(--gold);letter-spacing:1px;white-space:nowrap;">MONTHLY</button>
+            <button onclick="mcSetRange(2)" id="mcRng2" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;white-space:nowrap;">QUARTERLY</button>
+            <button onclick="mcSetRange(3)" id="mcRng3" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;white-space:nowrap;">HALF-YEARLY</button>
+            <button onclick="mcSetRange(4)" id="mcRng4" style="padding:5px 12px;border-radius:4px;font-size:0.65rem;font-weight:bold;cursor:pointer;border:1px solid #333;background:#111;color:#666;letter-spacing:1px;white-space:nowrap;">ANNUAL</button>
+            <!-- WIN RATE + FULLSCREEN -->
+            <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                <div style="display:flex;align-items:center;gap:6px;background:#0a0a00;border:1px solid #2a2a00;border-radius:4px;padding:4px 12px;">
+                    <span style="font-size:0.6rem;color:#555;letter-spacing:1px;">WIN RATE</span>
+                    <span id="mcWR" style="font-size:1rem;font-weight:900;color:var(--gold);">0%</span>
+                </div>
+                <button onclick="mcToggleFullscreen()" id="mcFsBtn" title="Fullscreen" style="background:#111;border:1px solid #333;color:#888;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.8rem;">⛶</button>
             </div>
         </div>
 

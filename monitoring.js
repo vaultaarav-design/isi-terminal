@@ -959,73 +959,84 @@ async function _renderMCChart() {
     const wrEl    = document.getElementById('mcWR');
     if (!canvas) return;
 
-    // --- Collect trades from selected clusters/nodes ---
-    // Load from Firebase for each selected cluster
     const rate = await getUsdInrRate();
 
-    // Use allTrades + clusters data to build multi-cluster equity
-    // Group trades by cluster+node, filter by selection
-    let picked = [];
+    // Load trades for ALL selected clusters from Firebase
+    // Build a map: cId -> [trades]
+    const clusterTradeMap = {};
 
-    // For each cluster, find its trades in allTrades
-    Object.entries(clusters).forEach(([cId, cluster]) => {
+    const loadPromises = Object.entries(clusters).map(([cId, cluster]) => {
         const sel = _mcSelections[cId];
-        if (!sel || !sel.on) return;
+        if (!sel || !sel.on) return Promise.resolve();
 
-        // Get trades for this cluster from allTrades
-        // allTrades has _nodeIdx but may not have _cId — so use selectedClusterId as fallback
-        const clusterTrades = allTrades.filter(t => {
-            const tCid = t._cId || t.clusterId || selectedClusterId;
-            return tCid === cId;
-        });
+        return new Promise(resolve => {
+            const nodes = cluster.nodes || [];
+            if (!nodes.length) { clusterTradeMap[cId] = []; resolve(); return; }
 
-        // If current selected cluster matches — use allTrades directly
-        if (cId === selectedClusterId) {
-            allTrades.forEach(t => {
-                if (sel.nodes[t._nodeIdx] !== false) {
-                    picked.push({ ...t, _selCId: cId });
+            let loaded = 0;
+            clusterTradeMap[cId] = [];
+
+            nodes.forEach((node, nIdx) => {
+                if (sel.nodes[nIdx] === false) { loaded++; if (loaded === nodes.length) resolve(); return; }
+
+                // Use already-loaded allTrades if this is the selectedCluster
+                if (cId === selectedClusterId) {
+                    const nodeTrades = allTrades
+                        .filter(t => t._nodeIdx === nIdx)
+                        .map(t => ({ ...t, _cId: cId }));
+                    clusterTradeMap[cId].push(...nodeTrades);
+                    loaded++;
+                    if (loaded === nodes.length) resolve();
+                } else {
+                    // Load from Firebase
+                    get(ref(db, `isi_v6/clusters/${cId}/nodes/${nIdx}/tradeHistory`)).then(snap => {
+                        if (snap.val()) {
+                            Object.entries(snap.val()).forEach(([fbKey, trade]) => {
+                                if (trade && trade.date) {
+                                    clusterTradeMap[cId].push({
+                                        ...trade,
+                                        _nodeIdx: nIdx,
+                                        _fbKey: fbKey,
+                                        _nodeTitle: node.title || 'Account ' + (nIdx+1),
+                                        _curr: node.curr || '$',
+                                        _cId: cId
+                                    });
+                                }
+                            });
+                        }
+                        loaded++;
+                        if (loaded === nodes.length) resolve();
+                    }).catch(() => { loaded++; if (loaded === nodes.length) resolve(); });
                 }
             });
-        }
-        // For other clusters, we'd need to load separately
-        // For now, if only one cluster loaded, use it
+        });
     });
 
-    // Fallback: if nothing picked but a cluster is selected & on, use all allTrades
-    if (!picked.length && selectedClusterId && _mcSelections[selectedClusterId]?.on) {
-        const sel = _mcSelections[selectedClusterId];
-        allTrades.forEach(t => {
-            if (sel.nodes[t._nodeIdx] !== false) picked.push(t);
-        });
-    }
+    await Promise.all(loadPromises);
 
-    // Sort chronologically
+    // Merge all selected trades
+    let picked = [];
+    Object.values(clusterTradeMap).forEach(trades => picked.push(...trades));
     picked.sort((a,b) => {
         const d = (a.date||'').localeCompare(b.date||'');
         return d !== 0 ? d : (a.savedAt||'').localeCompare(b.savedAt||'');
     });
 
-    // Apply range filter
+    // Apply range
     const maxTrades = MC_RANGE_VALUES[_mcRangeIdx];
     const histSlice = picked.slice(-maxTrades);
 
-    // Build equity curve — same logic as dashboard
-    // Start from sum of initial balances of selected nodes
+    // Start balance = sum of setup balances of selected nodes
     let startBal = 0;
     Object.entries(clusters).forEach(([cId, cluster]) => {
         const sel = _mcSelections[cId];
         if (!sel || !sel.on) return;
         (cluster.nodes||[]).forEach((node, nIdx) => {
-            if (sel.nodes[nIdx] !== false) {
-                // Use live balance if available
-                const stats = getNodeStats(cId, nIdx);
-                // For start bal, use setup balance (node.balance)
-                startBal += (node.balance ?? 0);
-            }
+            if (sel.nodes[nIdx] !== false) startBal += (node.balance ?? 0);
         });
     });
 
-    // eqPoints[0] = start, eqPoints[i+1] = after trade i
+    // Build equity curve
     let running = startBal;
     const eqPoints = [running];
     histSlice.forEach(t => {
@@ -1034,20 +1045,17 @@ async function _renderMCChart() {
         eqPoints.push(parseFloat(running.toFixed(2)));
     });
 
-    // Point colors — same as dashboard
+    // Colors + labels
     const pointColors = eqPoints.map((_, i) => {
         if (i === 0) return '#c5a059';
         return mcGetPulseColor(histSlice[i-1]);
     });
-
-    // Labels
     const labels = eqPoints.map((_, i) => {
         if (i === 0) return 'Start';
         const t = histSlice[i-1];
         return t?.date ? t.date.slice(5) : `T${i}`;
     });
 
-    // Win rate
     const wins = histSlice.filter(t => t.type === 'Target').length;
     const wr   = histSlice.length ? ((wins/histSlice.length)*100).toFixed(1) : 0;
     if (wrEl) wrEl.textContent = wr + '%';
@@ -1055,7 +1063,7 @@ async function _renderMCChart() {
     // Empty state
     if (histSlice.length === 0) {
         canvas.style.display = 'none';
-        if (emptyEl) { emptyEl.style.display = 'flex'; }
+        if (emptyEl) { emptyEl.style.display = 'flex'; emptyEl.style.position = 'absolute'; }
         if (statsEl) statsEl.innerHTML = '';
         return;
     }
@@ -1063,10 +1071,8 @@ async function _renderMCChart() {
     if (emptyEl) emptyEl.style.display = 'none';
 
     if (_mcChart) { _mcChart.destroy(); _mcChart = null; }
-
     const c2d = canvas.getContext('2d');
 
-    // Glow plugin — exact same as dashboard
     const glowPlugin = {
         id: 'mcPulseGlow',
         afterDatasetsDraw(chart) {
@@ -1075,17 +1081,12 @@ async function _renderMCChart() {
                 const col  = pointColors[i];
                 const glow = mcGetGlowColor(col);
                 c2d.save();
-                c2d.shadowColor = glow;
-                c2d.shadowBlur  = 18;
-                c2d.beginPath();
-                c2d.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-                c2d.fillStyle = col;
-                c2d.fill();
+                c2d.shadowColor = glow; c2d.shadowBlur = 18;
+                c2d.beginPath(); c2d.arc(pt.x, pt.y, 5, 0, Math.PI*2);
+                c2d.fillStyle = col; c2d.fill();
                 c2d.shadowBlur = 8;
-                c2d.beginPath();
-                c2d.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
-                c2d.fillStyle = col;
-                c2d.fill();
+                c2d.beginPath(); c2d.arc(pt.x, pt.y, 3, 0, Math.PI*2);
+                c2d.fillStyle = col; c2d.fill();
                 c2d.restore();
             });
         }
@@ -1097,67 +1098,51 @@ async function _renderMCChart() {
             labels,
             datasets: [{
                 data: eqPoints,
-                segment: {
-                    borderColor: ctx => pointColors[ctx.p1DataIndex] || '#c5a059'
-                },
+                segment: { borderColor: ctx => pointColors[ctx.p1DataIndex] || '#c5a059' },
                 borderWidth: 1.5,
-                pointRadius: 5,
-                pointHoverRadius: 8,
+                pointRadius: 5, pointHoverRadius: 8,
                 pointBackgroundColor: ctx => pointColors[ctx.dataIndex] || '#c5a059',
                 pointBorderColor:     ctx => pointColors[ctx.dataIndex] || '#c5a059',
-                pointBorderWidth: 1,
-                tension: 0.35,
-                fill: false
+                pointBorderWidth: 1, tension: 0.35, fill: false
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             animation: { duration: 300 },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        title: (items) => {
+                        title: items => {
                             const i = items[0].dataIndex;
                             if (i === 0) return 'Starting Balance';
                             const t = histSlice[i-1];
                             return t ? `${t.date} — ${t._nodeTitle||''}` : items[0].label;
                         },
-                        label: (item) => {
+                        label: item => {
                             const i = item.dataIndex;
                             const bal = item.parsed.y;
                             if (i === 0) return `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`;
                             const t = histSlice[i-1];
                             if (!t) return `Balance: $${bal.toFixed(2)}`;
-                            const scales  = (t.scale||[]).filter(s=>s).length;
-                            const outcome = t.type==='Stop Loss' ? '🔴 STOP LOSS' : scales>=2 ? '🟢 FULL WIN' : '🔵 PARTIAL';
-                            return [outcome, `P/L: $${(t.pl||0).toFixed(2)}`, `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`];
+                            const sc = (t.scale||[]).filter(s=>s).length;
+                            const out = t.type==='Stop Loss' ? '🔴 STOP LOSS' : sc>=2 ? '🟢 FULL WIN' : '🔵 PARTIAL';
+                            return [out, `P/L: $${(t.pl||0).toFixed(2)}`, `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`];
                         }
                     },
-                    backgroundColor: '#0d1117',
-                    borderColor: '#2a2a2a',
-                    borderWidth: 1,
-                    titleColor: '#c5a059',
-                    bodyColor: '#aaa',
-                    padding: 10
+                    backgroundColor: '#0d1117', borderColor: '#2a2a2a', borderWidth: 1,
+                    titleColor: '#c5a059', bodyColor: '#aaa', padding: 10
                 }
             },
             scales: {
-                y: {
-                    grid: { color: 'rgba(255,255,255,0.03)' },
-                    ticks: { color:'#555', font:{size:9}, callback: v => '$'+v.toLocaleString('en-US',{minimumFractionDigits:0}) }
-                },
-                x: {
-                    grid: { display: false },
-                    ticks: { color:'#444', font:{size:9}, maxRotation:45, maxTicksLimit:12 }
-                }
+                y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color:'#555', font:{size:9}, callback: v => '$'+v.toLocaleString('en-US') } },
+                x: { grid: { display: false }, ticks: { color:'#444', font:{size:9}, maxRotation:45, maxTicksLimit:12 } }
             }
         },
         plugins: [glowPlugin]
     });
 
-    // Stats bar
+    // Stats
     const totalNet = eqPoints[eqPoints.length-1] - eqPoints[0];
     const plC = totalNet >= 0 ? '#00c805' : '#ff3131';
     if (statsEl) statsEl.innerHTML = [
@@ -1165,14 +1150,11 @@ async function _renderMCChart() {
         ['WIN RATE', `<span style="color:var(--gold);font-family:monospace;">${wr}%</span>`],
         ['TRADES', `<span style="color:#ccc;font-family:monospace;">${histSlice.length}</span>`],
         ['W / L', `<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${histSlice.length-wins}</span>`]
-    ].map(([lbl,val]) => `
-        <div style="background:#060606;border:1px solid #1a1a1a;border-radius:5px;padding:7px 14px;">
-            <div style="font-size:0.55rem;color:#444;letter-spacing:1px;margin-bottom:2px;">${lbl}</div>
-            <div style="font-size:0.78rem;font-weight:bold;">${val}</div>
-        </div>`
-    ).join('');
+    ].map(([lbl,val]) => `<div style="background:#060606;border:1px solid #1a1a1a;border-radius:5px;padding:7px 14px;">
+        <div style="font-size:0.55rem;color:#444;letter-spacing:1px;margin-bottom:2px;">${lbl}</div>
+        <div style="font-size:0.78rem;font-weight:bold;">${val}</div>
+    </div>`).join('');
 }
-
 // ══════════════════════════════════════════════════════════
 // DELETE ALL SCREENSHOTS
 // ══════════════════════════════════════════════════════════
@@ -1236,4 +1218,40 @@ window.confirmDeleteSS = async function() {
     btn.disabled = false;
     closeDeleteSS();
     alert(`✅ ${count} screenshot${count!==1?'s':''} deleted successfully!`);
+};
+
+// ── MC FULLSCREEN TOGGLE ──
+window.mcToggleFullscreen = function() {
+    const panel = document.getElementById('mcPanel');
+    const inner = panel?.querySelector('div');
+    const btn   = document.getElementById('mcFsBtn');
+    if (!inner) return;
+
+    if (inner.dataset.fs === '1') {
+        // Restore
+        inner.style.maxWidth  = '900px';
+        inner.style.margin    = '0 auto';
+        inner.style.height    = '';
+        panel.style.padding   = '16px';
+        if (btn) btn.textContent = '⛶';
+        inner.dataset.fs = '0';
+        // Restore chart height
+        const chartBox = inner.querySelector('#mcEquityCanvas')?.parentElement;
+        if (chartBox) chartBox.style.height = '200px';
+    } else {
+        // Fullscreen
+        inner.style.maxWidth  = '100%';
+        inner.style.margin    = '0';
+        inner.style.height    = '100vh';
+        inner.style.overflowY = 'auto';
+        inner.style.borderRadius = '0';
+        panel.style.padding   = '0';
+        if (btn) btn.textContent = '✕FS';
+        inner.dataset.fs = '1';
+        // Expand chart height
+        const chartBox = inner.querySelector('#mcEquityCanvas')?.parentElement;
+        if (chartBox) chartBox.style.height = '320px';
+    }
+    // Resize chart
+    if (_mcChart) setTimeout(() => _mcChart.resize(), 100);
 };
