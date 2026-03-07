@@ -133,9 +133,9 @@
             width: 100%; overflow: hidden; position: relative;
             padding: 14px 0; background: #080808; border-bottom: 1px solid #1a1a1a;
         }
-        .slider-track { display: flex; gap: 14px; padding: 0 14px; animation: autoSlide 18s linear infinite; width: max-content; }
+        .slider-track { display: flex; gap: 14px; padding: 0 14px; animation: autoSlide 40s linear infinite; }
         .slider-track:hover { animation-play-state: paused; }
-        .slider-track.no-anim { animation: none; flex-wrap: wrap; width: 100%; }
+        .slider-track.no-anim { animation: none; flex-wrap: wrap; }
         @keyframes autoSlide { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 
         .s-timer-card {
@@ -357,13 +357,13 @@
     <div class="sib-sep">|</div>
     <div class="sib-item"><span class="sib-label">BALANCE</span><span id="sibBal" class="sib-val">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">RISK%</span><span id="sibRisk" class="sib-val" style="color:var(--accent);">—</span></div>
+    <div class="sib-item"><span class="sib-label">RISK%</span><span id="sibRisk" class="sib-val">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">RISK AMT</span><span id="sibRiskAmt" class="sib-val" style="color:var(--accent);">—</span></div>
+    <div class="sib-item"><span class="sib-label">QTY</span><span id="sibQty" class="sib-val">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">ACTIVE SLOT</span><span id="sibQty" class="sib-val" style="color:var(--gold);font-size:0.68rem;">—</span></div>
+    <div class="sib-item"><span class="sib-label">TODAY</span><span id="sibTime" class="sib-val">—</span></div>
     <div class="sib-sep">|</div>
-    <div class="sib-item"><span class="sib-label">ALL SLOTS</span><span id="sibTime" class="sib-val" style="font-size:0.65rem;">—</span></div>
+    <div class="sib-item"><span class="sib-label">RISK AMT</span><span id="sibRiskAmt" class="sib-val">—</span></div>
 </div>
 
 <!-- ===== TIMER SLIDER ===== -->
@@ -437,14 +437,6 @@
                     <option value="US30">US30</option>
                 </select>
             </div>
-        </div>
-        <!-- Slot selector — only visible when account has 2+ slots -->
-        <div class="slot-select-wrap" style="display:none; margin-top:10px;">
-            <label style="font-size:0.72rem; color:#888; display:block; margin-bottom:4px;">⏱ Trade Slot</label>
-            <select id="slotSelect" onchange="onSlotChange()"
-                style="width:100%; padding:9px 12px; background:#000; color:var(--gold);
-                       border:1px solid var(--gold); border-radius:5px; font-size:0.8rem; font-weight:bold;">
-            </select>
         </div>
         <div id="accountInfo">Select Cluster + Account from header to calculate risk...</div>
     </div>
@@ -535,34 +527,6 @@
             <span id="peBadgeScore" style="color:var(--gold);font-weight:bold;font-family:monospace;">—</span>
             <span id="peBadgeBias" style="color:#888;font-size:0.65rem;"></span>
             <span id="peBadgeConflict" style="color:#ff6600;font-size:0.65rem;"></span>
-        </div>
-
-        <!-- 🔒 LOCK RISK + LOCK QTY BANNER (RGB animated) -->
-        <div id="lockRiskBanner" style="display:none;background:#000;border-radius:6px;padding:8px 14px;margin-bottom:12px;
-             border:1px solid transparent;animation:rgbBorder 3s linear infinite;font-size:0.72rem;">
-            <style>
-                @keyframes rgbBorder {
-                    0%   { border-color: #ff0040; box-shadow: 0 0 6px #ff004033; }
-                    25%  { border-color: #ff8800; box-shadow: 0 0 6px #ff880033; }
-                    50%  { border-color: #00c8ff; box-shadow: 0 0 6px #00c8ff33; }
-                    75%  { border-color: #a855f7; box-shadow: 0 0 6px #a855f733; }
-                    100% { border-color: #ff0040; box-shadow: 0 0 6px #ff004033; }
-                }
-                @keyframes rgbText {
-                    0%   { color: #ff0040; }
-                    25%  { color: #ff8800; }
-                    50%  { color: #00c8ff; }
-                    75%  { color: #a855f7; }
-                    100% { color: #ff0040; }
-                }
-            </style>
-            <span style="color:#555;">🔒 LOCK:</span>
-            &nbsp;
-            <span style="color:#555;">RISK</span>
-            <b id="lbRiskAmt" style="font-family:monospace;font-weight:900;animation:rgbText 3s linear infinite;">—</b>
-            &nbsp;&nbsp;
-            <span style="color:#555;">QTY</span>
-            <b id="lbQty" style="font-family:monospace;font-weight:900;animation:rgbText 3s linear infinite;animation-delay:1.5s;">—</b>
         </div>
 
         <!-- STAR CHECKLIST — 8 items with RGB stars -->

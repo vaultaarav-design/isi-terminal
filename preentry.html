@@ -144,8 +144,7 @@
 #proceedBtn.conflict { background:linear-gradient(135deg,#1a0800,#3a1400);
     color:#ff6600; border:2px solid #ff6600; }
 
-@keyframes autoSlide { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        @keyframes readyPulse {
+@keyframes readyPulse {
     0%,100% { box-shadow:0 0 20px rgba(0,200,5,0.3); }
     50%     { box-shadow:0 0 40px rgba(0,200,5,0.6); }
 }
@@ -207,27 +206,7 @@
 
 <div class="container">
 
-<!-- TIMER SLIDER — same as dashboard, shows today's scheduled slots -->
-<div id="peTimerSliderWrap" style="margin-bottom:12px;overflow:hidden;background:#080808;border:1px solid #1a1a1a;border-radius:6px;padding:10px 0;">
-    <div id="peTimerSlider" style="display:flex;gap:12px;padding:0 12px;animation:autoSlide 18s linear infinite;width:max-content;">
-    </div>
-</div>
-
-<!-- SLOT SELECTOR — appears when account has 2+ slots -->
-<div id="peSlotWrap" style="display:none;margin-bottom:12px;padding:10px 14px;background:#050505;border:1px solid var(--gold);border-radius:6px;">
-    <div style="font-size:0.62rem;color:#888;letter-spacing:1px;margin-bottom:6px;">⏱ SELECT TRADE SLOT</div>
-    <select id="peSlotSel" onchange="onPeSlotChange()"
-        style="width:100%;padding:10px;background:#000;color:var(--gold);border:1px solid var(--gold);border-radius:5px;font-size:0.82rem;font-weight:bold;">
-    </select>
-    <!-- Lock Risk display -->
-    <div id="peLockRiskBar" style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;font-size:0.75rem;color:#aaa;display:none;">
-        <span>RISK%: <b id="peLockRiskPct" style="color:var(--accent);">—</b></span>
-        <span>RISK AMT: <b id="peLockRiskAmt" style="color:var(--accent);">—</b></span>
-        <span>LIVE BAL: <b id="peLockBal" style="color:var(--gold);">—</b></span>
-    </div>
-</div>
-
-
+<!-- 0. TRADER READINESS PROTOCOL -->
 <div class="card">
     <h2>0. Trader Readiness Protocol</h2>
     <div style="font-size:0.68rem;color:#555;margin-bottom:10px;font-style:italic;">
@@ -501,21 +480,6 @@
     <div style="margin-top:10px;">
         <label style="font-size:0.68rem;color:#666;">Pre-Trade Note (what are you seeing?)</label>
         <textarea id="peNote" rows="2" placeholder="e.g. Price swept equal lows at 2643, now showing CHoCH on M1 with FVG above. HTF demand holding. Looking for LTF confirmation..."></textarea>
-    </div>
-
-    <!-- LOCK RISK + AUTO QTY CALCULATOR -->
-    <div id="peQtyCalcWrap" style="margin-top:10px;padding:8px 12px;background:#050505;border:1px solid #1a2a1a;border-radius:6px;display:none;">
-        <div style="font-size:0.58rem;color:var(--gold);letter-spacing:1px;margin-bottom:6px;">🔒 LOCK RISK &amp; AUTO QUANTITY</div>
-        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-            <span style="font-size:0.68rem;color:#555;">Risk Amt: <b id="peCalcRiskAmt" style="color:var(--accent);font-family:monospace;">—</b></span>
-            <span style="font-size:0.68rem;color:#555;">SL Dist: <b id="peCalcSLDist" style="color:#888;font-family:monospace;">—</b></span>
-            <span style="font-size:0.68rem;color:#555;">Risk%: <b id="peCalcRiskPct" style="color:#888;font-family:monospace;">—</b></span>
-        </div>
-        <div style="margin-top:6px;background:#000;border:1px solid var(--accent);border-radius:5px;padding:6px 10px;display:flex;align-items:center;gap:10px;">
-            <span style="font-size:0.58rem;color:#555;letter-spacing:1px;">LOCK QTY</span>
-            <span id="peLockQty" style="font-size:1.1rem;font-weight:900;color:var(--accent);font-family:monospace;letter-spacing:1px;">—</span>
-            <span id="peLockQtyLabel" style="font-size:0.6rem;color:#555;"></span>
-        </div>
     </div>
 </div>
 

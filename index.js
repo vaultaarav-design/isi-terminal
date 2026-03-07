@@ -23,7 +23,6 @@ const db    = getDatabase(fbApp);
 let clusters          = {};
 let selectedClusterId = null;
 let selectedNodeIdx   = null;
-let selectedSlotIdx   = null;  // null = auto (time-based), number = manually selected
 let tradeHistory      = [];
 let equityPoints      = [];
 let chartInstance     = null;
@@ -42,19 +41,6 @@ const flowKeys = [
 const getActiveNode    = () => clusters[selectedClusterId]?.nodes[selectedNodeIdx] || null;
 const nodeBasePath     = () => `isi_v6/clusters/${selectedClusterId}/nodes/${selectedNodeIdx}`;
 const statsPath        = (cId, nIdx) => `isi_v6/stats/${cId}/${nIdx}`;
-
-// ─────────────────────────────────────────────────────────
-// HELPER — normalize day times (supports old {start,end,expire} + new array format)
-// Returns array of slot objects: [{start,end,expire,risk}]
-// ─────────────────────────────────────────────────────────
-function getDaySlots(node, dayName) {
-    const raw = node?.times?.[dayName];
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw.filter(s => s && s.start);
-    if (raw.start) return [{ start: raw.start, end: raw.end||'', expire: raw.expire||'', risk: raw.risk ?? node.risk ?? 0.35 }];
-    return [];
-}
-
 const activeStatsPath  = () => statsPath(selectedClusterId, selectedNodeIdx);
 const getClusterPass   = () => clusters[selectedClusterId]?.resetKey || null;
 
@@ -117,17 +103,13 @@ function updateClock() {
     document.querySelectorAll('.s-timer-card').forEach(card => {
         const n = clusters[card.dataset.cluster]?.nodes[card.dataset.node];
         if (!n) return;
+        const tt    = n.times?.[dayName] || {};
         const isSel = card.classList.contains('node-selected');
-
-        // Ab har card ek specific slot ka hai — data-slot se directly read karo
-        const slots   = getDaySlots(n, dayName);
-        const slotIdx = parseInt(card.dataset.slot) || 0;
-        const tt      = slots[slotIdx] || slots[0] || {};
-        const nowMin  = now.getHours() * 60 + now.getMinutes();
 
         const startMin  = timeToMinutes(tt.start);
         const endMin    = timeToMinutes(tt.end);
         const expireMin = timeToMinutes(tt.expire);
+        const nowMin    = now.getHours() * 60 + now.getMinutes();
 
         let st = 'NO DATA', sc = '#333', lbl = '--', countdown = '--:--:--';
         let phase = 'idle';
@@ -229,13 +211,11 @@ function renderTimerSlider() {
     let todayCards = [];
     entries.forEach(([cId, cluster]) => {
         cluster.nodes.forEach((node, nIdx) => {
-            // Har slot ke liye ALAG card — ek account ke 2 slots = 2 cards
-            const slots = getDaySlots(node, dayName);
-            slots.forEach((slot, slotIdx) => {
-                if (slot.start) {  // sirf wahi slot jiska start time set hai
-                    todayCards.push({ cId, cluster, node, nIdx, slot, slotIdx, totalSlots: slots.length });
-                }
-            });
+            const times = node.times?.[dayName] || {};
+            // Only include nodes that have a start time set for today
+            if (times.start) {
+                todayCards.push({ cId, cluster, node, nIdx, times });
+            }
         });
     });
 
@@ -245,20 +225,17 @@ function renderTimerSlider() {
         return;
     }
 
-    todayCards.forEach(({ cId, cluster, node, nIdx, slot, slotIdx, totalSlots }) => {
-        const st      = getNodeStats(cId, nIdx);
-        const liveBal = st.currentBal ?? node.balance ?? 0;
-        const slotRisk = slot.risk || node.risk || 0.35;
-        const riskAmt  = (liveBal * slotRisk / 100).toFixed(0);
-        const slotLabel = totalSlots > 1 ? ` · Slot ${slotIdx + 1}/${totalSlots}` : '';
-
+    todayCards.forEach(({ cId, cluster, node, nIdx, times }) => {
+        const s       = getNodeStats(cId, nIdx);
+        const liveBal = s.currentBal ?? node.balance ?? 0;
+        const riskAmt = (liveBal * (node.risk || 0) / 100).toFixed(0);
         grid.innerHTML += `
-            <div class="s-timer-card stc-landscape" data-cluster="${cId}" data-node="${nIdx}" data-slot="${slotIdx}">
+            <div class="s-timer-card stc-landscape" data-cluster="${cId}" data-node="${nIdx}">
                 <div class="stc-left">
                     <div class="stc-cluster">${cluster.title}</div>
-                    <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}${slotLabel}</div>
-                    <div class="stc-window">${slot.start||'--'} → ${slot.end||'--'} → ${slot.expire||'--'}</div>
-                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${slotRisk}%${slotLabel}</div>
+                    <div class="stc-name">${node.title || 'Account ' + (nIdx + 1)}</div>
+                    <div class="stc-window">${times.start} → ${times.end || '--'} → ${times.expire || '--'}</div>
+                    <div class="stc-risk">${node.curr}${riskAmt} risk · ${node.risk}% · Qty ${node.qtyFrom}–${node.qtyTo}</div>
                 </div>
                 <div class="stc-right">
                     <div class="stc-status-text tc-status-text">LOADING</div>
@@ -268,12 +245,13 @@ function renderTimerSlider() {
             </div>`;
     });
 
-    // Seamless loop — cloneNode se duplicate (innerHTML se nahi — warna timer tick reset karta hai)
-    Array.from(grid.children).forEach(c => grid.appendChild(c.cloneNode(true)));
-
-    // Speed: ~4s per card, 8s min, 25s max
-    grid.style.animationDuration = Math.max(8, Math.min(25, todayCards.length * 4)) + 's';
-    grid.classList.remove('no-anim');
+    // Duplicate for seamless scroll if enough cards
+    if (todayCards.length > 2) {
+        grid.innerHTML += grid.innerHTML;
+        grid.classList.remove('no-anim');
+    } else {
+        grid.classList.add('no-anim');
+    }
 
     highlightSelectedCard();
 }
@@ -418,56 +396,15 @@ function updateSelectedInfoBar() {
 
     const s        = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal  = s.currentBal ?? n.balance ?? 0;
-    const dayNameIB = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const slotsIB   = getDaySlots(n, dayNameIB);
-    const nowMinIB  = new Date().getHours() * 60 + new Date().getMinutes();
-
-    // Slot priority: selectedSlotIdx (user ne choose kiya) > time-based active > first slot
-    let chosenSlot = null;
-    let chosenSlotNum = 1;
-
-    if (selectedSlotIdx !== null && slotsIB[selectedSlotIdx]) {
-        // User ne slot dropdown se choose kiya
-        chosenSlot    = slotsIB[selectedSlotIdx];
-        chosenSlotNum = selectedSlotIdx + 1;
-    } else {
-        // Time-based: jo slot abhi active hai
-        for (let si = 0; si < slotsIB.length; si++) {
-            const ss = timeToMinutes(slotsIB[si].start);
-            const se = timeToMinutes(slotsIB[si].expire || slotsIB[si].end);
-            if (ss !== null && nowMinIB >= ss && (se === null || nowMinIB < se)) {
-                chosenSlot    = slotsIB[si];
-                chosenSlotNum = si + 1;
-                break;
-            }
-        }
-        // Fallback: first slot
-        if (!chosenSlot && slotsIB.length) {
-            chosenSlot    = slotsIB[0];
-            chosenSlotNum = 1;
-        }
-    }
-
-    const activeRisk = chosenSlot?.risk || 0.35;
-    const rAmt       = (liveBal * activeRisk / 100).toFixed(2);
-
-    // Slot label for RISK% field
-    const slotLabel = slotsIB.length > 1
-        ? ` · S${chosenSlotNum}/${slotsIB.length}`
-        : '';
-
-    // TODAY field: show all slots, highlight chosen
-    const timeWindow = slotsIB.length
-        ? slotsIB.map((sl, i) => {
-            const isCh = (i + 1) === chosenSlotNum;
-            return `${isCh ? '▶' : ''}${sl.start||'--'}→${sl.expire||sl.end||'--'}`;
-          }).join('  ')
-        : 'Not set';
+    const rAmt     = (liveBal * (n.risk || 0) / 100).toFixed(2);
+    const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const tt       = n.times?.[dayName] || {};
+    const timeWindow = (tt.start && tt.expire) ? `${tt.start} → ${tt.expire}` : 'Not set';
 
     document.getElementById('sibName').textContent    = n.title || ('Account ' + (selectedNodeIdx + 1));
     document.getElementById('sibBal').textContent     = `${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    document.getElementById('sibRisk').textContent    = `${activeRisk}%${slotLabel}`;
-    document.getElementById('sibQty').textContent     = chosenSlot ? `${chosenSlot.start||'--'}→${chosenSlot.expire||chosenSlot.end||'--'}` : '—';
+    document.getElementById('sibRisk').textContent    = `${n.risk}%`;
+    document.getElementById('sibQty').textContent     = `${n.qtyFrom} – ${n.qtyTo}`;
     document.getElementById('sibTime').textContent    = timeWindow;
     document.getElementById('sibRiskAmt').textContent = `${n.curr}${rAmt}`;
     bar.classList.add('vis');
@@ -479,14 +416,8 @@ function highlightSelectedCard() {
     removeCardHighlight();
     if (!selectedClusterId || selectedNodeIdx === null) return;
     document.querySelectorAll('.s-timer-card').forEach(c => {
-        const clusterMatch = c.dataset.cluster === selectedClusterId;
-        const nodeMatch    = parseInt(c.dataset.node) === selectedNodeIdx;
-        if (!clusterMatch || !nodeMatch) return;
-        // Agar slot manually select hua hai to sirf wahi slot ka card blue
-        // Agar null hai (account sirf select, slot nahi) to sab slots blue
-        if (selectedSlotIdx === null || parseInt(c.dataset.slot) === selectedSlotIdx) {
+        if (c.dataset.cluster === selectedClusterId && parseInt(c.dataset.node) === selectedNodeIdx)
             c.classList.add('node-selected');
-        }
     });
 }
 function removeCardHighlight() {
@@ -502,99 +433,29 @@ window.updateRiskCalc = function () {
         document.getElementById('accountInfo').textContent = 'Select Cluster + Account from header to calculate risk...';
         return;
     }
-    const asset    = document.getElementById('assetSelect').value;
-    const s        = getNodeStats(selectedClusterId, selectedNodeIdx);
-    const liveBal  = s.currentBal ?? n.balance ?? 0;
-    const dayName2 = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const slots2   = getDaySlots(n, dayName2);
-    const nowMin2  = new Date().getHours() * 60 + new Date().getMinutes();
+    const asset   = document.getElementById('assetSelect').value;
+    const s       = getNodeStats(selectedClusterId, selectedNodeIdx);
+    const liveBal = s.currentBal ?? n.balance ?? 0;
+    const rAmt    = liveBal * (n.risk || 0) / 100;
+    let hint      = '';
 
-    // Populate slot dropdown
-    const slotSel = document.getElementById('slotSelect');
-    if (slotSel) {
-        const prevVal = slotSel.value;
-        slotSel.innerHTML = '';
-        if (slots2.length <= 1) {
-            slotSel.closest('.slot-select-wrap')?.style && (slotSel.closest('.slot-select-wrap').style.display = 'none');
-        } else {
-            slotSel.closest('.slot-select-wrap')?.style && (slotSel.closest('.slot-select-wrap').style.display = '');
-            slots2.forEach((sl, si) => {
-                const opt = document.createElement('option');
-                opt.value = si;
-                opt.textContent = `Slot ${si+1}: ${sl.start||'--'}→${sl.expire||sl.end||'--'} (${sl.risk||0.35}%)`;
-                slotSel.appendChild(opt);
-            });
-            // Restore previous or auto-select active slot
-            if (prevVal !== '' && slots2[parseInt(prevVal)]) {
-                slotSel.value = prevVal;
-            } else {
-                // Auto-select currently active slot
-                let autoIdx = 0;
-                for (let si = 0; si < slots2.length; si++) {
-                    const ss = timeToMinutes(slots2[si].start);
-                    const se = timeToMinutes(slots2[si].expire || slots2[si].end);
-                    if (ss !== null && nowMin2 >= ss && (se === null || nowMin2 < se)) { autoIdx = si; break; }
-                }
-                slotSel.value = autoIdx;
-            }
-        }
-    }
-
-    // Get risk from selected slot
-    const selSlotIdx  = slotSel && slots2.length > 1 ? parseInt(slotSel.value) || 0 : null;
-    let   activeSlot  = null;
-    if (selSlotIdx !== null && slots2[selSlotIdx]) {
-        activeSlot = slots2[selSlotIdx];
-    } else {
-        // Auto: pick time-based active slot
-        for (const sl of slots2) {
-            const ss = timeToMinutes(sl.start);
-            const se = timeToMinutes(sl.expire || sl.end);
-            if (ss !== null && nowMin2 >= ss && (se === null || nowMin2 < se)) { activeSlot = sl; break; }
-        }
-        if (!activeSlot) activeSlot = slots2[0] || null;
-    }
-    const activeRisk2 = activeSlot?.risk || 0.35;
-    const rAmt        = liveBal * activeRisk2 / 100;
-
-    // Update selectedSlotIdx + highlight
-    if (selSlotIdx !== null) {
-        selectedSlotIdx = selSlotIdx;
-    } else {
-        selectedSlotIdx = slots2.length === 1 ? 0 : null;
-    }
-    highlightSelectedCard();
-
-    let hint = '';
     if (asset === 'XAUUSD') {
         const mn = ((rAmt / 7) * 0.01).toFixed(2);
         const mx = ((rAmt / 2.5) * 0.01).toFixed(2);
-        hint = `Suggested: <b>${mn} – ${mx} Lots</b> (Gold $2.5–$7 SL range)`;
+        hint     = `Suggested: <b>${mn} – ${mx} Lots</b> (Gold $2.5–$7 SL range)`;
         document.getElementById('riskQty').value = `${mn} - ${mx}`;
     } else {
         hint = `Risk Amount: <b>${n.curr}${rAmt.toFixed(2)}</b> | Adjust qty manually for ${asset}`;
     }
 
-    const slotInfo = slots2.length > 1
-        ? ` &nbsp;<span style="color:#555;font-size:0.65rem;">· Slot ${(selSlotIdx??0)+1}/${slots2.length} · ${activeRisk2}%</span>`
-        : `<span style="color:#555;font-size:0.65rem;"> · ${activeRisk2}%</span>`;
-
     document.getElementById('accountInfo').innerHTML = `
-        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;align-items:center;">
-            <span>ACC: <b>${n.title||'Account '+(selectedNodeIdx+1)}</b>${slotInfo}</span>
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+            <span>ACC: <b>${n.title||'Account '+(selectedNodeIdx+1)}</b></span>
             <span>RISK AMT: <b style="color:var(--accent)">${n.curr}${rAmt.toFixed(2)}</b></span>
             <span>LIVE BAL: <b style="color:var(--gold)">${n.curr}${liveBal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></span>
         </div>
         <div style="margin-top:4px;font-size:0.75rem;color:#aaa;">${hint}</div>`;
     updateFlowStatus();
-};
-
-// Called when user manually changes slot dropdown
-window.onSlotChange = function() {
-    selectedSlotIdx = null; // reset so updateRiskCalc re-reads dropdown
-    updateRiskCalc();        // risk calc + selectedSlotIdx set karega
-    updateSelectedInfoBar(); // info bar bhi sync karo
-    highlightSelectedCard(); // timer card bhi sync karo
 };
 
 // ──────────────────────────────────────────────
@@ -810,33 +671,11 @@ function loadPreEntryBadge() {
         const badge = document.getElementById('preEntryBadge');
         if (!pe || !badge) return;
         const today = new Date().toISOString().slice(0,10);
-        if (pe.date !== today) return;
+        if (pe.date !== today) return; // only show today's
         badge.style.display = 'flex';
         document.getElementById('peBadgeScore').textContent = `Score: ${pe.score}/100`;
         document.getElementById('peBadgeBias').textContent  = pe.biasResult ? pe.biasResult.slice(0,50) : '';
         if (pe.conflict) document.getElementById('peBadgeConflict').textContent = '⚠ CONFLICT';
-
-        // Show LOCK RISK + QTY banner
-        const lockBanner = document.getElementById('lockRiskBanner');
-        if (lockBanner && (pe.lockRiskAmt || pe.lockQty)) {
-            const node = clusters[pe.clusterId]?.nodes[pe.nodeIdx];
-            const curr = node?.curr || '$';
-            document.getElementById('lbRiskAmt').textContent = curr + (pe.lockRiskAmt||0).toFixed(2);
-            document.getElementById('lbQty').textContent     = pe.lockQty != null
-                ? (pe.lockQty < 1 ? Number(pe.lockQty).toFixed(3) : Number(pe.lockQty).toFixed(2))
-                : '—';
-            lockBanner.style.display = 'flex';
-        }
-
-        // Auto-fill riskQty in execution flow
-        if (pe.lockQty != null) {
-            const rqEl = document.getElementById('riskQty');
-            if (rqEl) {
-                const qty = pe.lockQty;
-                rqEl.value = qty < 1 ? qty.toFixed(3) : qty.toFixed(2);
-                updateFlowStatus();
-            }
-        }
     } catch(e) {}
 }
 
@@ -914,11 +753,7 @@ window.handleSaveAction = async function () {
             ],
             scale:   Array.from(document.querySelectorAll('.scale:checked')).map(c => c.value),
             image:   img,
-            savedAt: new Date().toISOString(),
-            // Pre-entry lock data
-            lockRiskAmt: (() => { try { const pe = JSON.parse(localStorage.getItem('isi_last_preentry')||'null'); return pe?.lockRiskAmt||null; } catch(e){ return null; } })(),
-            lockQty:     (() => { try { const pe = JSON.parse(localStorage.getItem('isi_last_preentry')||'null'); return pe?.lockQty||null;     } catch(e){ return null; } })(),
-            preScore:    (() => { try { const pe = JSON.parse(localStorage.getItem('isi_last_preentry')||'null'); return pe?.score||null;        } catch(e){ return null; } })(),
+            savedAt: new Date().toISOString()
         };
 
         try {
@@ -1040,11 +875,10 @@ function renderPortal() {
 
     const aumStr = Object.entries(totByCurr).map(([c,v])=>`${c}${v.toFixed(2)}`).join(' + ');
     const netStr = Object.entries(netByCurr).map(([c,v])=>`${v>=0?'+':''}${c}${v.toFixed(2)}`).join(' + ');
-    const _defCurr = clusters[selectedClusterId]?.nodes[0]?.curr || '$';
     foot.innerHTML = `<tr><td>TOTAL</td><td>${tT}</td><td>${tW}</td>
-        <td style="color:${netStr.includes('-')?'#ff5252':'#00ff41'}">${netStr||_defCurr+'0.00'}</td>
+        <td style="color:${netStr.includes('-')?'#ff5252':'#00ff41'}">${netStr||'$0.00'}</td>
         <td>${tT?(tW/tT*100).toFixed(1):0}%</td>
-        <td style="color:var(--gold);font-weight:bold;">${aumStr||_defCurr+'0.00'}</td></tr>`;
+        <td style="color:var(--gold);font-weight:bold;">${aumStr||'$0.00'}</td></tr>`;
 }
 
 // ──────────────────────────────────────────────
@@ -1328,20 +1162,19 @@ function updateChart() {
                             return t ? `${t.date} — ${t.nodeTitle || ''}` : items[0].label;
                         },
                         label: (item) => {
-                            const i    = item.dataIndex;
-                            const bal  = item.parsed.y;
-                            const curr = (selectedNodeIdx >= 0 && clusters[selectedClusterId]?.nodes[selectedNodeIdx]?.curr) || '$';
-                            if (i === 0) return `Balance: ${curr}${bal.toLocaleString('en-US', {minimumFractionDigits:2})}`;
+                            const i   = item.dataIndex;
+                            const bal = item.parsed.y;
+                            if (i === 0) return `Balance: $${bal.toLocaleString('en-US', {minimumFractionDigits:2})}`;
                             const t = histSlice[i - 1];
-                            if (!t) return `Balance: ${curr}${bal.toFixed(2)}`;
+                            if (!t) return `Balance: $${bal.toFixed(2)}`;
                             const scales = (t.scale||[]).filter(s=>s).length;
                             const outcome = t.type === 'Stop Loss'
                                 ? '🔴 STOP LOSS'
                                 : scales >= 2 ? '🟢 FULL WIN' : '🔵 PARTIAL (1 Scale)';
                             return [
                                 `${outcome}`,
-                                `P/L: ${curr}${(t.pl||0).toFixed(2)}`,
-                                `Balance: ${curr}${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`
+                                `P/L: $${(t.pl||0).toFixed(2)}`,
+                                `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`
                             ];
                         }
                     },
@@ -1359,10 +1192,7 @@ function updateChart() {
                     ticks: {
                         color: '#555',
                         font: { size: 9 },
-                        callback: v => {
-                            const curr = (selectedNodeIdx >= 0 && clusters[selectedClusterId]?.nodes[selectedNodeIdx]?.curr) || '$';
-                            return curr + v.toLocaleString('en-US', { minimumFractionDigits: 0 });
-                        }
+                        callback: v => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 0 })
                     }
                 },
                 x: {

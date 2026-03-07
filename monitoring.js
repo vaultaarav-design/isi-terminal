@@ -30,26 +30,6 @@ let preentryData       = {};  // { [clusterId]: { [nodeIdx]: { [fbKey]: record }
 // Stats path — dedicated lightweight path
 const statsPath = (cId, nIdx) => `isi_v6/stats/${cId}/${nIdx}`;
 
-// ── USD/INR LIVE RATE HELPER ──
-let _usdInrRate = null, _rateTs = 0;
-async function getUsdInrRate() {
-    const now = Date.now();
-    if (_usdInrRate && (now - _rateTs) < 10 * 60 * 1000) return _usdInrRate;
-    try {
-        const r = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
-        const j = await r.json();
-        _usdInrRate = j.rates?.INR || 84;
-        _rateTs = now;
-    } catch(e) { _usdInrRate = _usdInrRate || 84; }
-    return _usdInrRate;
-}
-async function mixedToUSD(byCurr) {
-    const rate = await getUsdInrRate();
-    let total = 0;
-    for (const [c, v] of Object.entries(byCurr)) total += (c === '$') ? v : v / rate;
-    return total;
-}
-
 function getNodeStats(cId, nIdx) {
     const cached = liveStats[cId]?.[String(nIdx)];
     if (cached) return cached;
@@ -264,16 +244,7 @@ function renderPerformanceCard(filtered) {
         const c = cluster.nodes[nodeIdx]?.curr || '$';
         plByCurr[c] = (plByCurr[c] || 0) + (t.pl || 0);
     });
-    const hasMixedPl = Object.keys(plByCurr).length > 1;
-    let plStr = Object.entries(plByCurr).map(([c,v])=>`${v>=0?'+':''}${c}${v.toFixed(2)}`).join(' ') || '+$0.00';
-    if (hasMixedPl) {
-        getUsdInrRate().then(rate => {
-            let usdTotal = 0;
-            Object.entries(plByCurr).forEach(([c,v]) => usdTotal += (c==='$')?v:v/rate);
-            const plEl2 = document.getElementById('periodPl');
-            plEl2.innerHTML = plStr + ` <span style="color:#555;font-size:0.65rem;">(≈${usdTotal>=0?'+':''}$${usdTotal.toFixed(2)} USD)</span>`;
-        });
-    }
+    const plStr = Object.entries(plByCurr).map(([c,v])=>`${v>=0?'+':''}${c}${v.toFixed(2)}`).join(' ') || '+$0.00';
     const plEl = document.getElementById('periodPl');
     plEl.innerHTML   = plStr;
     plEl.style.color = totalPl >= 0 ? 'var(--accent)' : 'var(--danger)';
@@ -317,17 +288,9 @@ function renderPerformanceCard(filtered) {
         const bal = s.currentBal ?? n.balance ?? 0;
         byCurr[c] = (byCurr[c]||0) + bal;
     });
-    const byCurrEntries = Object.entries(byCurr);
-    const hasMixedBal = byCurrEntries.length > 1;
-    const balStr = byCurrEntries.map(([c,v]) => `${c}${v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`).join(' + ') || '$0.00';
-    if (hasMixedBal) {
-        mixedToUSD(byCurr).then(usdTotal => {
-            getUsdInrRate().then(rate => {
-                currBalEl.innerHTML = balStr + ` <span style="color:#555;font-size:0.65rem;display:block;">≈ $${usdTotal.toLocaleString('en-US',{minimumFractionDigits:2})} USD @ ₹${rate.toFixed(1)}</span>`;
-            });
-        });
-    }
-    currBalEl.innerText = balStr;
+    currBalEl.innerText = Object.entries(byCurr)
+        .map(([c,v]) => `${c}${v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
+        .join(' + ') || '$0.00';
 }
 
 // ──────────────────────────────────────────────
@@ -350,12 +313,9 @@ function renderRecentSessions() {
         <div class="recent-card">
             <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:0.85rem;">
                 <span>${t.date} | <span style="color:var(--gold)">${t._nodeTitle}</span></span>
-                <div style="text-align:right;">
-                    <span style="color:${(t.pl || 0) >= 0 ? 'var(--accent)' : 'var(--danger)'}">
-                        ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
-                    </span>
-                    ${t.lockRiskAmt!=null||t.lockQty!=null?`<div style="font-size:0.62rem;color:#00c8ff;margin-top:2px;">🔒 ${t.lockRiskAmt!=null?(t._curr||'$')+Number(t.lockRiskAmt).toFixed(2):''} ${t.lockQty!=null?'Qty:'+( Number(t.lockQty)<1?Number(t.lockQty).toFixed(3):Number(t.lockQty).toFixed(2)):''}</div>`:''}
-                </div>
+                <span style="color:${(t.pl || 0) >= 0 ? 'var(--accent)' : 'var(--danger)'}">
+                    ${(t.pl || 0) >= 0 ? '+' : ''}$${(t.pl || 0).toFixed(2)}
+                </span>
             </div>
             <div style="font-size:0.72rem; margin-top:5px; color:var(--gold);">
                 Asset: ${t.asset || '—'} | Outcome: ${t.type || '—'} | Grade: ${t.grade || '—'}
@@ -453,7 +413,7 @@ function renderCalendar(filtered) {
                 <span class="d-num">${d}</span>
                 ${dayTr.length > 0 ? `
                     <span style="font-weight:bold; font-size:0.72rem; color:${dayPL >= 0 ? '#00ff41' : '#ff3131'}; text-align:center;">
-                        ${dayPL >= 0 ? '+' : ''}${dayTr[0]?._curr||'$'}${Math.abs(dayPL).toFixed(0)}
+                        ${dayPL >= 0 ? '+' : ''}$${Math.abs(dayPL).toFixed(0)}
                     </span>
                     <span class="d-trades">${dayTr.length} trade${dayTr.length > 1 ? 's' : ''}</span>
                 ` : ''}
@@ -491,7 +451,7 @@ window.openDayTrades = function (date, trades) {
     document.getElementById('modalTitle').innerHTML =
         `${date} &nbsp;|&nbsp; ${trades.length} Trade${trades.length > 1 ? 's' : ''} &nbsp;|&nbsp;
          <span style="color:${totalPl >= 0 ? 'var(--accent)' : 'var(--danger)'}">
-            ${totalPl >= 0 ? '+' : ''}${trades[0]?._curr||'$'}${Math.abs(totalPl).toFixed(2)}
+            ${totalPl >= 0 ? '+' : ''}$${totalPl.toFixed(2)}
          </span>`;
 
     document.getElementById('modalBody').innerHTML = trades.map(t => `
@@ -501,15 +461,10 @@ window.openDayTrades = function (date, trades) {
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
                     <b style="font-size:0.9rem;">${t.asset || '—'} | ${t._nodeTitle}</b>
-                    <br><small style="color:#666;">Grade: ${t.grade || '—'} | ${t.type || '—'} | Lot: ${t.riskQty || '—'}</small>
-                    ${t.lockRiskAmt != null || t.lockQty != null ? `
-                    <div style="margin-top:5px;display:flex;gap:12px;">
-                        ${t.lockRiskAmt != null ? `<span style="font-size:0.65rem;color:#00c8ff;">🔒 Risk: <b>${t._curr||'$'}${Number(t.lockRiskAmt).toFixed(2)}</b></span>` : ''}
-                        ${t.lockQty != null ? `<span style="font-size:0.65rem;color:#00c8ff;">🔒 Qty: <b>${Number(t.lockQty) < 1 ? Number(t.lockQty).toFixed(3) : Number(t.lockQty).toFixed(2)}</b></span>` : ''}
-                    </div>` : ''}
+                    <br><small style="color:#666;">Grade: ${t.grade || '—'} | ${t.type || '—'} | Lot: ${t.pl || 0 >= 0 ? '' : ''}${t.riskQty || '—'}</small>
                 </div>
                 <div style="color:${(t.pl || 0) >= 0 ? '#00ff41' : '#ff3131'}; font-weight:bold; font-size:1rem;">
-                    ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
+                    ${(t.pl || 0) >= 0 ? '+' : ''}$${(t.pl || 0).toFixed(2)}
                 </div>
             </div>
         </div>
@@ -582,14 +537,6 @@ window.viewDeepDive = function (nodeIdxStr, fbKey) {
                 ${bestPE.direction ? `<p style="font-size:0.7rem;"><b>Planned:</b> ${bestPE.direction} · RR ${bestPE.rrPlanned||'—'}</p>` : ''}
                 ${bestPE.note ? `<p style="font-size:0.68rem;color:#888;font-style:italic;">"${bestPE.note.slice(0,120)}"</p>` : ''}
                 ${bestPE.conflict ? `<p style="color:#ff6600;font-size:0.65rem;">⚠ Conflict noted pre-trade</p>` : ''}
-                ${(bestPE.lockRiskAmt != null || bestPE.lockQty != null) ? `
-                <div style="margin-top:8px;padding:8px 10px;background:#000;border:1px solid #003344;border-radius:5px;">
-                    <div style="font-size:0.52rem;color:#555;letter-spacing:2px;margin-bottom:5px;">🔒 LOCKED FROM PRE-ENTRY</div>
-                    <div style="display:flex;gap:18px;">
-                        ${bestPE.lockRiskAmt != null ? `<div><div style="font-size:0.52rem;color:#555;">LOCK RISK</div><div style="font-size:1rem;font-weight:bold;color:#00c8ff;font-family:monospace;">${t._curr||'$'}${Number(bestPE.lockRiskAmt).toFixed(2)}</div></div>` : ''}
-                        ${bestPE.lockQty != null ? `<div><div style="font-size:0.52rem;color:#555;">LOCK QTY</div><div style="font-size:1rem;font-weight:bold;color:#00c8ff;font-family:monospace;">${Number(bestPE.lockQty)<1?Number(bestPE.lockQty).toFixed(3):Number(bestPE.lockQty).toFixed(2)}</div></div>` : ''}
-                    </div>
-                </div>` : ''}
             </div>` : `
             <div class="info-pane" style="border-color:#1a1a00;">
                 <h3 style="color:#444;margin-top:0;font-size:0.85rem;">4. PRE-ENTRY ANALYSIS</h3>
@@ -754,4 +701,383 @@ window.runAIWeeklyCoach = async function () {
         grades: gradeCount, assets, days
     });
     renderAIResponse('aiCoachBox', result, '🤖 AI Weekly Performance Coach');
+};
+
+// ══════════════════════════════════════════════════════════
+// CALENDAR / LIST VIEW TOGGLE
+// ══════════════════════════════════════════════════════════
+window.onCalViewMode = function() {
+    const mode = document.getElementById('calViewMode').value;
+    document.getElementById('calendarArea').style.display = mode === 'calendar' ? '' : 'none';
+    document.getElementById('listViewArea').style.display = mode === 'list' ? '' : 'none';
+    if (mode === 'list') renderListView();
+};
+
+function renderListView() {
+    const container = document.getElementById('listViewArea');
+    if (!container) return;
+    const filtered = getFilteredTrades();
+
+    // Group by date descending
+    const byDate = {};
+    filtered.forEach(t => {
+        const d = t.date || 'Unknown';
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(t);
+    });
+    const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+
+    if (!dates.length) {
+        container.innerHTML = '<div style="color:#333;text-align:center;padding:30px;font-size:0.78rem;">No trades in selected range.</div>';
+        return;
+    }
+
+    container.innerHTML = dates.map(date => {
+        const trades = byDate[date];
+        const dayPL  = trades.reduce((s,t) => s + (t.pl||0), 0);
+        const dayColor = dayPL > 0 ? '#00c805' : dayPL < 0 ? '#ff3131' : '#00aaff';
+        const dayLabel = dayPL > 0 ? 'GREEN' : dayPL < 0 ? 'RED' : 'BE';
+
+        const cards = trades.map(t => {
+            const pl = t.pl || 0;
+            let bg, border, oc;
+            if (t.type === 'Target')    { bg='#001500'; border='#00c805'; oc='#00c805'; }
+            else if(t.type==='Stop Loss'){ bg='#150000'; border='#ff3131'; oc='#ff3131'; }
+            else                        { bg='#001020'; border='#00aaff'; oc='#00aaff'; }
+
+            return `<div onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}')"
+                style="background:${bg};border:1px solid ${border};border-radius:6px;padding:10px 14px;
+                       cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
+                <div>
+                    <div style="font-size:0.74rem;font-weight:bold;color:#ccc;">${t.asset||'—'} &nbsp;|&nbsp; <span style="color:#888;">${t._nodeTitle}</span></div>
+                    <div style="font-size:0.6rem;color:#555;margin-top:2px;">${t.position||'—'} · Grade: <b style="color:#aaa;">${t.grade||'—'}</b> · ${t.liq||'—'}</div>
+                    ${(t.lockRiskAmt!=null||t.lockQty!=null)?`<div style="font-size:0.58rem;color:#00aaff;margin-top:2px;">🔒 Risk: ${t._curr||'$'}${Number(t.lockRiskAmt||0).toFixed(2)} · Qty: ${t.lockQty?Number(t.lockQty).toFixed(4):'—'}</div>`:''}
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:0.92rem;font-weight:bold;color:${oc};font-family:monospace;">${pl>=0?'+':''}${t._curr||'$'}${Math.abs(pl).toFixed(2)}</div>
+                    <div style="font-size:0.6rem;color:${oc};">${t.type||'—'}</div>
+                </div>
+            </div>`;
+        }).join('');
+
+        return `<div style="margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        background:#050505;border:1px solid #1a1a1a;border-radius:6px;
+                        padding:9px 14px;margin-bottom:8px;">
+                <span style="font-size:0.76rem;font-weight:bold;color:#ccc;">${date}</span>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:0.62rem;font-weight:bold;color:${dayColor};background:${dayColor}22;padding:2px 8px;border-radius:10px;">${dayLabel}</span>
+                    <span style="font-size:0.76rem;color:${dayColor};font-family:monospace;font-weight:bold;">${dayPL>=0?'+':''}${trades[0]?._curr||'$'}${Math.abs(dayPL).toFixed(2)}</span>
+                    <span style="font-size:0.6rem;color:#444;">${trades.length} trade${trades.length>1?'s':''}</span>
+                </div>
+            </div>
+            ${cards}
+        </div>`;
+    }).join('');
+}
+
+// Also re-render list when filters change
+const _origRenderAll = window.onFilterChange;
+window.onFilterChange = function() {
+    if (_origRenderAll) _origRenderAll();
+    const mode = document.getElementById('calViewMode')?.value;
+    if (mode === 'list') renderListView();
+};
+
+// ══════════════════════════════════════════════════════════
+// AI FULL ANALYSIS — MONITORING PAGE
+// ══════════════════════════════════════════════════════════
+window.runMonAI = async function() {
+    const { callAI, showAILoading, renderAIResponse } = await import('./gemini.js');
+    const box = document.getElementById('monAIBox');
+    if (!box) return;
+    box.style.display = 'block';
+    showAILoading('monAIBox');
+
+    const filtered = getFilteredTrades();
+    const wins    = filtered.filter(t => t.type === 'Target').length;
+    const losses  = filtered.filter(t => t.type === 'Stop Loss').length;
+    const totalPL = filtered.reduce((s,t) => s+(t.pl||0), 0);
+    const wr      = filtered.length ? ((wins/filtered.length)*100).toFixed(1) : 0;
+
+    const grades = {};
+    filtered.forEach(t => { if(t.grade) grades[t.grade]=(grades[t.grade]||0)+1; });
+
+    const vios = {};
+    filtered.forEach(t => (t.vios||[]).forEach(v => { vios[v]=(vios[v]||0)+1; }));
+
+    const assetPL = {};
+    filtered.forEach(t => { assetPL[t.asset||'?']=(assetPL[t.asset||'?']||0)+(t.pl||0); });
+
+    const recent6 = filtered.slice(0,6).map(t =>
+        `${t.date} | ${t.asset} | ${t.type} | P/L:${t._curr}${(t.pl||0).toFixed(2)} | Grade:${t.grade||'—'} | Vios:${(t.vios||[]).join(',')||'None'}`
+    ).join('\n');
+
+    const prompt = `You are an elite institutional trading performance analyst for ISI Terminal.
+
+TRADING PERFORMANCE DATA:
+- Total Trades: ${filtered.length} | Wins: ${wins} | Losses: ${losses}
+- Win Rate: ${wr}% | Net P/L: $${totalPL.toFixed(2)}
+- Grade Distribution: ${JSON.stringify(grades)}
+- Top Rule Violations: ${JSON.stringify(vios)}
+- Asset P/L Breakdown: ${JSON.stringify(assetPL)}
+
+LAST 6 SESSIONS:
+${recent6}
+
+Provide a thorough, actionable analysis in these sections:
+1. OVERALL ASSESSMENT — performance summary
+2. STRENGTHS — what is working well
+3. CRITICAL WEAKNESSES — exact patterns causing losses
+4. VIOLATION ANALYSIS — which violations are most costly
+5. ASSET INSIGHTS — best and worst performing assets
+6. ACTION PLAN — 3 specific things to improve next week
+
+Be direct, data-driven, institutional-grade. No fluff.`;
+
+    const result = await callAI(prompt, 'monAIBox');
+    renderAIResponse('monAIBox', result, '🤖 AI Full Performance Analysis');
+};
+
+// ══════════════════════════════════════════════════════════
+// MULTI CLUSTER EQUITY PANEL
+// ══════════════════════════════════════════════════════════
+let _mcSelections = {};   // { cId: { on: bool, nodes: { nIdx: bool } } }
+let _mcChart      = null;
+
+window.openMultiCluster = async function() {
+    document.getElementById('mcPanel').style.display = 'block';
+    _buildMCList();
+    await _renderMCChart();
+};
+
+window.closeMultiCluster = function() {
+    document.getElementById('mcPanel').style.display = 'none';
+};
+
+function _buildMCList() {
+    const list = document.getElementById('mcClusterList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        // Init selection state
+        if (!_mcSelections[cId]) {
+            _mcSelections[cId] = { on: true, nodes: {} };
+            (cluster.nodes||[]).forEach((_,i) => _mcSelections[cId].nodes[i] = true);
+        }
+        const sel = _mcSelections[cId];
+
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'background:#040404;border:1px solid #1a1a1a;border-radius:6px;padding:10px 14px;';
+
+        // Node rows
+        const nodeRows = (cluster.nodes||[]).map((node, nIdx) => {
+            const stats = getNodeStats(cId, nIdx);
+            const bal   = stats.currentBal ?? node.balance ?? 0;
+            const net   = stats.net ?? 0;
+            const curr  = node.curr || '$';
+            const netCol = net >= 0 ? '#00c805' : '#ff3131';
+            const chk   = sel.nodes[nIdx] !== false ? 'checked' : '';
+            return `<label style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:5px 0;border-top:1px solid #0d0d0d;">
+                <input type="checkbox" ${chk} onchange="mcToggleNode('${cId}',${nIdx},this.checked)"
+                    style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0;">
+                <span style="font-size:0.7rem;color:#bbb;flex:1;">${node.title||'Account '+(nIdx+1)}</span>
+                <span style="font-size:0.68rem;color:var(--gold);font-family:monospace;">${curr}${bal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                <span style="font-size:0.65rem;color:${netCol};font-family:monospace;">${net>=0?'+':''}${curr}${Math.abs(net).toFixed(2)}</span>
+            </label>`;
+        }).join('');
+
+        const cChk = sel.on ? 'checked' : '';
+        wrap.innerHTML = `
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:4px;">
+                <input type="checkbox" ${cChk} onchange="mcToggleCluster('${cId}',this.checked)"
+                    style="accent-color:#00aaff;width:16px;height:16px;flex-shrink:0;">
+                <span style="font-size:0.78rem;font-weight:bold;color:#00aaff;">${cluster.title}</span>
+                <span style="font-size:0.58rem;color:#444;">${(cluster.nodes||[]).length} accounts</span>
+            </label>
+            <div id="mcNodes_${cId}" style="${sel.on?'':'display:none'}">${nodeRows}</div>`;
+        list.appendChild(wrap);
+    });
+}
+
+window.mcToggleCluster = function(cId, on) {
+    if (!_mcSelections[cId]) _mcSelections[cId] = { on, nodes: {} };
+    _mcSelections[cId].on = on;
+    const nd = document.getElementById('mcNodes_' + cId);
+    if (nd) nd.style.display = on ? '' : 'none';
+    _renderMCChart();
+};
+
+window.mcToggleNode = function(cId, nIdx, on) {
+    if (!_mcSelections[cId]) _mcSelections[cId] = { on: true, nodes: {} };
+    _mcSelections[cId].nodes[nIdx] = on;
+    _renderMCChart();
+};
+
+async function _renderMCChart() {
+    const canvas  = document.getElementById('mcEquityCanvas');
+    const emptyEl = document.getElementById('mcChartEmpty');
+    const statsEl = document.getElementById('mcStats');
+    if (!canvas) return;
+
+    // Collect trades from selected clusters/nodes
+    let picked = [];
+    allTrades.forEach(t => {
+        const cId = t.clusterId || t._cId || selectedClusterId;
+        const sel = _mcSelections[cId];
+        if (!sel || !sel.on) return;
+        if (sel.nodes[t._nodeIdx] === false) return;
+        picked.push(t);
+    });
+
+    // If no _cId stored, include all allTrades when current cluster is selected
+    if (!picked.length && selectedClusterId && _mcSelections[selectedClusterId]?.on) {
+        picked = [...allTrades];
+    }
+
+    picked.sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+    if (!picked.length) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = '';
+        if (statsEl) statsEl.innerHTML = '';
+        return;
+    }
+    canvas.style.display = '';
+    emptyEl.style.display = 'none';
+
+    const rate = await getUsdInrRate();
+    let eq = 0;
+    const labels = [], data = [], ptColors = [];
+
+    picked.forEach((t, i) => {
+        const pl = (t._curr === '₹' || t.curr === '₹') ? (t.pl||0)/rate : (t.pl||0);
+        eq += pl;
+        labels.push(t.date ? t.date.slice(5) : 'T'+(i+1));
+        data.push(parseFloat(eq.toFixed(2)));
+        ptColors.push(pl >= 0 ? '#00c805' : '#ff3131');
+    });
+
+    if (_mcChart) { _mcChart.destroy(); _mcChart = null; }
+
+    _mcChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                segment: { borderColor: ctx => ctx.p1.parsed.y >= ctx.p0.parsed.y ? '#00c805' : '#ff3131' },
+                backgroundColor: 'transparent',
+                pointBackgroundColor: ptColors,
+                pointRadius: 3,
+                tension: 0.3,
+                borderWidth: 2,
+                borderColor: '#00c805'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color:'#444', font:{size:9} }, grid: { color:'#111' } },
+                y: { ticks: { color:'#444', font:{size:9} }, grid: { color:'#111' } }
+            }
+        }
+    });
+
+    // Stats
+    const totalPL = picked.reduce((s,t) => {
+        const pl = (t._curr==='₹'||t.curr==='₹') ? (t.pl||0)/rate : (t.pl||0);
+        return s + pl;
+    }, 0);
+    const wins = picked.filter(t => t.type==='Target').length;
+    const wr   = picked.length ? ((wins/picked.length)*100).toFixed(1) : 0;
+    const plC  = totalPL >= 0 ? '#00c805' : '#ff3131';
+
+    if (statsEl) statsEl.innerHTML = [
+        ['NET P/L (USD)', `<span style="color:${plC};font-family:monospace;">${totalPL>=0?'+':''}$${Math.abs(totalPL).toFixed(2)}</span>`],
+        ['WIN RATE',      `<span style="color:var(--gold);font-family:monospace;">${wr}%</span>`],
+        ['TOTAL TRADES',  `<span style="color:#ccc;font-family:monospace;">${picked.length}</span>`],
+        ['WINS / LOSSES', `<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${picked.length-wins}</span>`]
+    ].map(([lbl, val]) => `
+        <div style="background:#060606;border:1px solid #1a1a1a;border-radius:5px;padding:8px 14px;">
+            <div style="font-size:0.55rem;color:#444;letter-spacing:1px;margin-bottom:3px;">${lbl}</div>
+            <div style="font-size:0.78rem;font-weight:bold;">${val}</div>
+        </div>`
+    ).join('');
+}
+
+// Expose getUsdInrRate for MC chart
+async function getUsdInrRate() {
+    try {
+        const r = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const j = await r.json();
+        return j.rates?.INR || 84;
+    } catch(e) { return 84; }
+}
+
+// ══════════════════════════════════════════════════════════
+// DELETE ALL SCREENSHOTS
+// ══════════════════════════════════════════════════════════
+window.openDeleteSS = function() {
+    const panel = document.getElementById('deleteSsPanel');
+    panel.style.display = 'flex';
+    const sel = document.getElementById('delSsCid');
+    sel.innerHTML = '<option value="">— Select Cluster —</option>';
+    Object.entries(clusters).forEach(([cId, c]) => {
+        const o = document.createElement('option');
+        o.value = cId; o.textContent = c.title;
+        if (cId === selectedClusterId) o.selected = true;
+        sel.appendChild(o);
+    });
+    document.getElementById('delSsPass').value = '';
+    document.getElementById('delSsErr').textContent = '';
+};
+
+window.closeDeleteSS = function() {
+    document.getElementById('deleteSsPanel').style.display = 'none';
+};
+
+window.confirmDeleteSS = async function() {
+    const cId  = document.getElementById('delSsCid').value;
+    const pass = document.getElementById('delSsPass').value.trim();
+    const err  = document.getElementById('delSsErr');
+    const btn  = document.getElementById('delSsConfirmBtn');
+
+    err.textContent = '';
+    if (!cId)  { err.textContent = 'Please select a cluster.'; return; }
+    if (!pass) { err.textContent = 'Please enter password.'; return; }
+
+    // Verify password against Firebase
+    try {
+        const snap = await get(ref(db, `isi_v6/clusters/${cId}/securityKey`));
+        const stored = snap.val();
+        if (stored && pass !== stored) {
+            err.textContent = '❌ Wrong password!'; return;
+        }
+    } catch(e) { err.textContent = 'Error checking password.'; return; }
+
+    btn.textContent = '⏳ Deleting...';
+    btn.disabled = true;
+
+    let count = 0;
+    const clusterTrades = allTrades.filter(t => {
+        const tid = t.clusterId || t._cId || selectedClusterId;
+        return tid === cId;
+    });
+
+    for (const t of clusterTrades) {
+        if (!t.image) continue;
+        try {
+            await update(ref(db, `isi_v6/clusters/${cId}/nodes/${t._nodeIdx}/tradeHistory/${t._fbKey}`), { image: null });
+            t.image = null;
+            count++;
+        } catch(e) {}
+    }
+
+    btn.textContent = '🗑 CONFIRM DELETE';
+    btn.disabled = false;
+    closeDeleteSS();
+    alert(`✅ ${count} screenshot${count!==1?'s':''} deleted successfully!`);
 };
