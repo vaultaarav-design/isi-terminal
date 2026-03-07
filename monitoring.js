@@ -481,6 +481,9 @@ window.viewDeepDive = function (nodeIdxStr, fbKey) {
     const t = allTrades.find(x => x._nodeIdx === nodeIdx && x._fbKey === fbKey);
     if (!t) return;
 
+    // Always ensure modal is open (works from both calendar day-list AND list view)
+    document.getElementById('tradeModal').style.display = 'block';
+
     const viosHtml   = (t.vios || []).length > 0
         ? t.vios.map(v => `<span class="tag red">${v}</span>`).join('')
         : '<span class="tag green">Clean Session</span>';
