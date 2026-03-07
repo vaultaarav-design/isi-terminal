@@ -1446,20 +1446,35 @@ const oaths = [
     "Final Command: Aaj ka goal perfect execution hai. Profit khud follow karega. 🎖️"
 ];
 
-window.closeOath = function () { document.getElementById('oathPopup').style.display = 'none'; };
+window.closeOath = function () {
+    document.getElementById('oathPopup').style.display = 'none';
+    // Remember today's date — oath won't show again today
+    localStorage.setItem('isi_oath_date', new Date().toISOString().split('T')[0]);
+};
 
 // ──────────────────────────────────────────────
 // DOM READY
 // ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-    // Oath
-    const d = document.getElementById('oathDisplay');
-    if (d) d.innerText = oaths[Math.floor(Math.random() * oaths.length)];
+    // Oath — show only once per day
+    const today     = new Date().toISOString().split('T')[0];
+    const oathDone  = localStorage.getItem('isi_oath_date');
+    const popup     = document.getElementById('oathPopup');
+    const d         = document.getElementById('oathDisplay');
+
+    if (oathDone === today) {
+        // Already sworn today — hide immediately
+        if (popup) popup.style.display = 'none';
+    } else {
+        // Show oath
+        if (d) d.innerText = oaths[Math.floor(Math.random() * oaths.length)];
+        if (popup) popup.style.display = 'flex';
+    }
 
     // Checklist
     initFlowUI();
 
     // Today's date default
     const td = document.getElementById('tradeDate');
-    if (td) td.value = new Date().toISOString().split('T')[0];
+    if (td) td.value = today;
 });
